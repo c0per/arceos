@@ -41,12 +41,12 @@ impl Iterator for MemRegionIter {
 
 #[inline]
 pub const fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-    PhysAddr::from(vaddr.as_usize() - axconfig::PHYS_VIRT_OFFSET)
+    PhysAddr::from(vaddr.as_usize())
 }
 
 #[inline]
 pub const fn phys_to_virt(paddr: PhysAddr) -> VirtAddr {
-    VirtAddr::from(paddr.as_usize() + axconfig::PHYS_VIRT_OFFSET)
+    VirtAddr::from(paddr.as_usize())
 }
 
 pub fn memory_regions() -> impl Iterator<Item = MemRegion> {

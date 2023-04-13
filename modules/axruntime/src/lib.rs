@@ -189,6 +189,12 @@ fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
     if axhal::cpu::this_cpu_is_bsp() {
         let mut kernel_page_table = PageTable::try_new()?;
         for r in memory_regions() {
+            ax_println!(
+                "remapping: {:?} to {:?} , {:?}",
+                phys_to_virt(r.paddr),
+                r.paddr,
+                r.size
+            );
             kernel_page_table.map_region(
                 phys_to_virt(r.paddr),
                 r.paddr,
