@@ -110,7 +110,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
         init_allocator();
     }
 
-    #[cfg(feature = "paging")]
+    #[cfg(all(feature = "paging", not(feature = "no_mmu")))]
     {
         info!("Initialize kernel page table...");
         remap_kernel_memory().expect("remap kernel memoy failed");
@@ -178,7 +178,7 @@ fn init_allocator() {
     }
 }
 
-#[cfg(feature = "paging")]
+#[cfg(all(feature = "paging", not(feature = "no_mmu")))]
 fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
     use axhal::mem::{memory_regions, phys_to_virt};
     use axhal::paging::PageTable;

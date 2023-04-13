@@ -63,6 +63,20 @@ fn gen_config_rs(arch: &str, platform: &str) -> Result<()> {
     for (key, value) in &config {
         let var_name = key.to_uppercase().replace('-', "_");
         if let Value::String(s) = value {
+            if cfg!(feature = "no_mmu") {
+                match var_name.as_str() {
+                    "PHYS_VIRT_OFFSET" => {
+                        writeln!(output, "pub const {var_name}: usize = 0;")?;
+                        continue;
+                    }
+                    "KERNEL_BASE_VADDR" => {
+                        writeln!(output, "pub const {var_name}: usize = KERNEL_BASE_PADDR;")?;
+                        continue;
+                    }
+                    _ => (),
+                }
+            }
+
             if is_num(s) {
                 writeln!(output, "pub const {var_name}: usize = {s};")?;
             } else {

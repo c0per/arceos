@@ -15,6 +15,7 @@ platform-qemu-virt-aarch64 = [
     "dep:page_table_entry", "dep:ratio",
 ]
 paging = ["axalloc", "page_table"]
+no_mmu = ["axconfig/no_mmu"]
 default = []
 
 [dependencies]

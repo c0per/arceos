@@ -9,6 +9,7 @@ authors = ["Yuekai Jia <equation618@gmail.com>"]
 [features]
 platform-qemu-virt-riscv = []
 platform-qemu-virt-aarch64 = []
+no_mmu = []
 default = []
 
 [dependencies]

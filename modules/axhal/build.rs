@@ -16,7 +16,14 @@ fn gen_linker_script(arch: &str) -> Result<()> {
     let ld_content = ld_content.replace("%ARCH%", output_arch);
     let ld_content = ld_content.replace(
         "%KERNEL_BASE%",
-        &format!("{:#x}", axconfig::KERNEL_BASE_VADDR),
+        &format!(
+            "{:#x}",
+            if cfg!(feature = "no_mmu") {
+                axconfig::KERNEL_BASE_PADDR
+            } else {
+                axconfig::KERNEL_BASE_VADDR
+            }
+        ),
     );
     let ld_content = ld_content.replace("%SMP%", &format!("{}", axconfig::SMP));
 

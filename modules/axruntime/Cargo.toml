@@ -16,6 +16,8 @@ fs = ["alloc", "paging", "axdriver/virtio-blk", "axfs/use-virtio-blk"] # TODO: r
 net = ["alloc", "paging", "axdriver/virtio-net", "dep:axnet"]
 display = ["alloc", "paging", "axdriver/virtio-gpu", "dep:axdisplay"]
 
+no_mmu = ["axhal/no_mmu", "axconfig/no_mmu"]
+
 default = []
 
 [dependencies]
