@@ -16,6 +16,7 @@ fn main() {
     gen_config_rs(&arch, platform).unwrap();
 
     println!("cargo:rerun-if-env-changed=SMP");
+    println!("cargo:rerun-if-changed=src");
 }
 
 fn parse_config_toml(result: &mut Table, path: impl AsRef<Path>) -> Result<()> {
