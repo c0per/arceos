@@ -2,6 +2,7 @@ pub use core::time::Duration;
 
 /// A measurement of a monotonically nondecreasing clock.
 /// Opaque and useful only with [`Duration`].
+#[derive(Debug)]
 pub struct Instant(Duration);
 
 impl Instant {
