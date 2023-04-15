@@ -41,6 +41,10 @@ pub(crate) fn exit(status: i32) -> ! {
     unreachable!("Task already called exit().")
 }
 
+pub(crate) fn write(fd: usize, buf: *const u8, len: usize) -> isize {
+    syscall(SyscallId::Write, [fd, buf as usize, len, 0])
+}
+
 #[no_mangle]
 extern "C" fn _user_start() {
     extern "Rust" {

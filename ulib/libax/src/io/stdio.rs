@@ -109,9 +109,31 @@ macro_rules! println {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "syscall")] {
+        struct Logger;
+
+        impl core::fmt::Write for Logger {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                crate::syscall::write(1, s.as_ptr(), s.len());
+                Ok(())
+            }
+        }
+    }
+}
+
 #[doc(hidden)]
 pub fn __print_impl(args: core::fmt::Arguments) {
-    static INLINE_LOCK: Mutex<()> = Mutex::new(()); // not break in one line
-    let _guard = INLINE_LOCK.lock();
-    stdout().write_fmt(args).unwrap();
+    #[cfg(feature = "syscall")]
+    {
+        use core::fmt::Write;
+        Logger.write_fmt(args).unwrap();
+    }
+
+    #[cfg(not(feature = "syscall"))]
+    {
+        static INLINE_LOCK: Mutex<()> = Mutex::new(()); // not break in one line
+        let _guard = INLINE_LOCK.lock();
+        stdout().write_fmt(args).unwrap();
+    }
 }
