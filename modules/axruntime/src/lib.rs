@@ -21,10 +21,6 @@ const LOGO: &str = r#"
 d88P     888 888      "Y8888P  "Y8888   "Y88888P"   "Y8888P"
 "#;
 
-extern "Rust" {
-    fn main();
-}
-
 struct LogIfImpl;
 
 #[crate_interface::impl_interface]
@@ -147,9 +143,27 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
         core::hint::spin_loop();
     }
 
-    unsafe { main() };
+    #[cfg(feature = "syscall")]
+    {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "multitask")] {
+                todo!()
+            } else {
+                axhal::arch::enter_user();
+            }
+        }
+    }
 
-    axtask::exit(0)
+    #[cfg(not(feature = "syscall"))]
+    {
+        extern "Rust" {
+            fn main();
+        }
+
+        unsafe { main() };
+
+        axtask::exit(0)
+    }
 }
 
 #[cfg(feature = "alloc")]

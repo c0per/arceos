@@ -45,7 +45,8 @@ pub use self::task::TaskId;
 pub use self::wait_queue::WaitQueue;
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "sched_fifo")] {
+    // Use fifo scheduler if not specified
+    if #[cfg(any(feature = "sched_fifo", feature = "multitask"))] {
         type AxTask = scheduler::FifoTask<TaskInner>;
         type Scheduler = scheduler::FifoScheduler<TaskInner>;
     } else if #[cfg(feature = "sched_rr")] {

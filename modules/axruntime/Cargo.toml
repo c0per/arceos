@@ -9,7 +9,7 @@ authors = ["Yuekai Jia <equation618@gmail.com>"]
 [features]
 alloc = ["dep:axalloc"]
 paging = ["alloc", "axhal/paging", "dep:lazy_init"]
-multitask = ["alloc", "axtask/multitask"]
+multitask = ["alloc", "axtask/multitask", "axsyscall?/multitask"]
 smp = ["axhal/smp", "spinlock/smp"]
 
 fs = ["alloc", "paging", "axdriver/virtio-blk", "axfs/use-virtio-blk"] # TODO: remove "paging"
@@ -17,6 +17,7 @@ net = ["alloc", "paging", "axdriver/virtio-net", "dep:axnet"]
 display = ["alloc", "paging", "axdriver/virtio-gpu", "dep:axdisplay"]
 
 no_mmu = ["axhal/no_mmu", "axconfig/no_mmu"]
+syscall = ["no_mmu", "axhal/syscall", "dep:axsyscall"]
 
 default = []
 
@@ -35,3 +36,5 @@ axfs = { path = "../axfs", optional = true }
 axnet = { path = "../axnet", optional = true }
 axdisplay = { path = "../axdisplay", optional = true }
 axtask = { path = "../axtask", default-features = false }
+axsyscall = { path = "../axsyscall", optional = true }
+cfg-if = "1.0.0"

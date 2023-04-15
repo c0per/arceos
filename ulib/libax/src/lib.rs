@@ -27,3 +27,6 @@ pub mod net;
 
 #[cfg(feature = "display")]
 pub mod display;
+
+#[cfg(feature = "syscall")]
+mod syscall;

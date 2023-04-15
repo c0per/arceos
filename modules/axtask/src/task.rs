@@ -41,6 +41,7 @@ pub struct TaskInner {
     preempt_disable_count: AtomicUsize,
 
     kstack: Option<TaskStack>,
+    ustack: Option<TaskStack>,
     ctx: UnsafeCell<TaskContext>,
 }
 
@@ -101,6 +102,7 @@ impl TaskInner {
             #[cfg(feature = "preempt")]
             preempt_disable_count: AtomicUsize::new(0),
             kstack: None,
+            ustack: None,
             ctx: UnsafeCell::new(TaskContext::new()),
         }
     }
@@ -111,13 +113,20 @@ impl TaskInner {
     {
         let mut t = Self::new_common(TaskId::new(), name);
         debug!("new task: {}", t.id_name());
+
         let kstack = TaskStack::alloc(align_up_4k(stack_size));
+        let ustack = TaskStack::alloc(align_up_4k(stack_size));
+
         t.entry = Some(Box::into_raw(Box::new(entry)));
-        t.ctx.get_mut().init(task_entry as usize, kstack.top());
+        t.ctx.get_mut().init(task_entry as usize, ustack.top());
+
         t.kstack = Some(kstack);
+        t.ustack = Some(ustack);
+
         if name == "idle" {
             t.is_idle = true;
         }
+
         Arc::new(AxTask::new(t))
     }
 

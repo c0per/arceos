@@ -127,3 +127,47 @@ unsafe extern "C" fn context_switch(_current_task: &mut TaskContext, _next_task:
         options(noreturn),
     )
 }
+
+#[cfg(feature = "syscall")]
+pub fn enter_user() -> ! {
+    use axconfig::TASK_STACK_SIZE;
+    use riscv::register::sstatus::{self, Sstatus};
+    extern "C" {
+        fn _user_start();
+    }
+
+    static KERNEL_STACK: [u8; TASK_STACK_SIZE] = [0; TASK_STACK_SIZE];
+    static USER_STACK: [u8; TASK_STACK_SIZE] = [0; TASK_STACK_SIZE];
+
+    let mut trap_frame = TrapFrame::default();
+
+    trap_frame.regs.sp = USER_STACK.as_ptr() as usize + TASK_STACK_SIZE;
+    trap_frame.sepc = _user_start as usize;
+
+    // set SPP to User
+    let sstatus_reg = sstatus::read();
+    trap_frame.sstatus = unsafe { *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) };
+
+    unsafe {
+        asm!(
+            "mv sp, {tf}", // set sp to TrapFrame, restore gp, tp
+            "LDR gp, sp, 2",
+            "LDR tp, sp, 3",
+
+            "LDR t0, sp, 31", // restore sstatus, sepc
+            "csrw sepc, t0",
+            "LDR t0, sp, 32",
+            "csrw sstatus, t0",
+
+            "csrw sscratch, {kstack}", // store kernel_stack in sscratch
+
+            "POP_GENERAL_REGS", // restore other registers
+            "LDR sp, sp, 1", // set sp to user_stack
+
+            "sret",
+            tf = in(reg) &trap_frame as *const TrapFrame,
+            kstack = in(reg) KERNEL_STACK.as_ptr() as usize + TASK_STACK_SIZE,
+            options(noreturn)
+        );
+    }
+}

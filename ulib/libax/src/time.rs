@@ -8,7 +8,18 @@ pub struct Instant(Duration);
 impl Instant {
     /// Returns an instant corresponding to "now".
     pub fn now() -> Instant {
-        Instant(axhal::time::current_time())
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "syscall")] {
+                use crate::syscall::{get_time_of_day, TimeVal};
+
+                let mut tv = TimeVal::default();
+                get_time_of_day(&mut tv);
+
+                Instant(tv.into())
+            } else {
+                Instant(axhal::time::current_time())
+            }
+        }
     }
 
     /// Returns the amount of time elapsed from another instant to this one,

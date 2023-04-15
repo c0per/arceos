@@ -7,4 +7,9 @@ impl axhal::trap::TrapHandler for TrapHandlerImpl {
         axhal::irq::dispatch_irq(irq_num);
         drop(guard); // rescheduling may occur when preemption is re-enabled.
     }
+
+    #[cfg(feature = "syscall")]
+    fn handle_user_ecall(syscall_id: usize, args: [usize; 4]) -> isize {
+        axsyscall::syscall(syscall_id, args)
+    }
 }

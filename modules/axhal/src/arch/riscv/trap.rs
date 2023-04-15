@@ -19,6 +19,21 @@ fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
     let scause = scause::read();
     match scause.cause() {
         Trap::Exception(E::Breakpoint) => handle_breakpoint(&mut tf.sepc),
+
+        #[cfg(feature = "syscall")]
+        Trap::Exception(E::UserEnvCall) => {
+            trace!("Handling user syscall.");
+            // set sret to the next instruction
+            tf.sepc += 4;
+
+            tf.regs.a0 = crate::trap::handle_user_ecall(
+                tf.regs.a7,
+                [tf.regs.a0, tf.regs.a1, tf.regs.a2, tf.regs.a3],
+            ) as usize;
+
+            trace!("Syscall handled. Returning to U mode.");
+        }
+
         Trap::Interrupt(_) => crate::trap::handle_irq_extern(scause.bits()),
         _ => {
             panic!(

@@ -10,6 +10,9 @@ use riscv::register::{satp, sstatus, stvec};
 
 pub use context::{TaskContext, TrapFrame};
 
+#[cfg(feature = "syscall")]
+pub use context::enter_user;
+
 #[inline]
 pub fn enable_irqs() {
     unsafe { sstatus::set_sie() }
