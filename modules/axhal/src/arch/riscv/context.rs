@@ -144,15 +144,37 @@ pub fn enter_user() -> ! {
     trap_frame.regs.sp = USER_STACK.as_ptr() as usize + TASK_STACK_SIZE;
     trap_frame.sepc = _user_start as usize;
 
+    // restore kernel gp, tp
+    let tp: usize;
+    let gp: usize;
+    unsafe {
+        asm!(
+            "mv {}, tp",
+            "mv {}, gp",
+            out(reg) tp,
+            out(reg) gp,
+        );
+    }
+    trap_frame.regs.tp = tp;
+    trap_frame.regs.gp = gp;
+
+    unsafe {
+        core::ptr::write(
+            (KERNEL_STACK.as_ptr() as usize + TASK_STACK_SIZE - core::mem::size_of::<TrapFrame>())
+                as *mut TrapFrame,
+            trap_frame.clone(),
+        );
+    }
+
     // set SPP to User
     let sstatus_reg = sstatus::read();
     trap_frame.sstatus = unsafe { *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) };
 
     unsafe {
         asm!(
-            "mv sp, {tf}", // set sp to TrapFrame, restore gp, tp
-            "LDR gp, sp, 2",
-            "LDR tp, sp, 3",
+            "mv sp, {tf}", // set sp to TrapFrame
+            "li gp, 0", // set user gp, tp to 0
+            "li tp, 0",
 
             "LDR t0, sp, 31", // restore sstatus, sepc
             "csrw sepc, t0",
