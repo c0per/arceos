@@ -6,6 +6,10 @@ pub use axlog::{debug, error, info, trace, warn};
 extern crate alloc;
 extern crate axlog;
 
+// for axsyscall implementation
+extern crate axhal;
+extern crate axtask;
+
 #[cfg(not(test))]
 extern crate axruntime;
 

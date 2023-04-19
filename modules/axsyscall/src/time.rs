@@ -1,3 +1,5 @@
+use crate_interface::{call_interface, def_interface};
+
 #[allow(dead_code)]
 pub struct TimeVal {
     secs: isize,
@@ -25,13 +27,11 @@ impl Default for TimeVal {
     }
 }
 
-pub(super) fn get_time_of_day(tv: *mut TimeVal, _tz: usize) -> isize {
-    // TODO: translate user address
-    // TODO: EFAULT, One of tv or tz pointed outside the accessible address space.
+pub(super) fn get_time_of_day(tv: *mut TimeVal, tz: usize) -> isize {
+    call_interface!(SyscallTime::get_time_of_day, tv, tz)
+}
 
-    unsafe {
-        *tv = axhal::time::current_time().into();
-    }
-
-    0
+#[def_interface]
+pub trait SyscallTime {
+    fn get_time_of_day(tv: *mut TimeVal, _tz: usize) -> isize;
 }

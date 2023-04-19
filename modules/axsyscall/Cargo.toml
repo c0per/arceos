@@ -6,12 +6,7 @@ authors = ["Jiayu Chen <c0percn@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-multitask = ["axtask/multitask"]
-default = []
-
 [dependencies]
-axhal = { path = "../axhal", features = ["syscall"] }
-axtask = { path = "../axtask", default-features = false }
+crate_interface = { path = "../../crates/crate_interface" }
 num-derive = "0.3.3"
 num-traits = { version = "0.2.15", default-features = false }

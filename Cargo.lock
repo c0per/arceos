@@ -241,6 +241,7 @@ dependencies = [
  "arm_gic",
  "axalloc",
  "axconfig",
+ "axsyscall",
  "bitflags 2.1.0",
  "cfg-if",
  "crate_interface",
@@ -315,6 +316,7 @@ dependencies = [
  "crate_interface",
  "kernel_guard",
  "lazy_init",
+ "num-traits",
  "percpu",
  "spinlock",
 ]
@@ -332,8 +334,7 @@ dependencies = [
 name = "axsyscall"
 version = "0.1.0"
 dependencies = [
- "axhal",
- "axtask",
+ "crate_interface",
  "num-derive",
  "num-traits",
 ]
@@ -344,6 +345,7 @@ version = "0.1.0"
 dependencies = [
  "axconfig",
  "axhal",
+ "axsyscall",
  "axtask",
  "cfg-if",
  "crate_interface",

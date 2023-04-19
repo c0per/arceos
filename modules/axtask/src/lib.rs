@@ -23,6 +23,9 @@ impl kernel_guard::KernelGuardIf for KernelGuardIfImpl {
     }
 }
 
+#[cfg(feature = "syscall")]
+mod syscall;
+
 cfg_if::cfg_if! {
 if #[cfg(feature = "multitask")] {
 

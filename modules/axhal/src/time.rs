@@ -17,3 +17,20 @@ pub fn current_time_nanos() -> u64 {
 pub fn current_time() -> TimeValue {
     TimeValue::from_nanos(current_time_nanos())
 }
+
+cfg_if::cfg_if! {
+if #[cfg(feature = "syscall")] {
+
+    struct SyscallTimeImpl;
+
+    #[crate_interface::impl_interface]
+    impl axsyscall::time::SyscallTime for SyscallTimeImpl {
+        fn get_time_of_day(tv: *mut axsyscall::time::TimeVal, _tz: usize) -> isize {
+            unsafe { *tv = current_time().into(); }
+
+            0
+        }
+    }
+
+}
+}

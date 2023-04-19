@@ -16,7 +16,7 @@ platform-qemu-virt-aarch64 = [
 ]
 paging = ["axalloc", "page_table"]
 no_mmu = ["axconfig/no_mmu"]
-syscall = []
+syscall = ["dep:axsyscall"]
 default = []
 
 [dependencies]
@@ -26,6 +26,7 @@ bitflags = "2.0"
 static_assertions = "1.1.0"
 axconfig = { path = "../axconfig" }
 axalloc = { path = "../axalloc", optional = true }
+axsyscall = { path = "../axsyscall", optional = true }
 kernel_guard = { path = "../../crates/kernel_guard" }
 spinlock = { path = "../../crates/spinlock" }
 ratio = { path = "../../crates/ratio", optional = true }

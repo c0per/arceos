@@ -18,7 +18,7 @@ alloc = ["axruntime/alloc", "axio/alloc"]
 paging = ["axruntime/paging"]
 
 # Multi-task
-multitask = ["axruntime/multitask", "axtask/multitask", "axsync/multitask", "axsyscall?/multitask"]
+multitask = ["axruntime/multitask", "axtask/multitask", "axsync/multitask"]
 sched_fifo = ["axtask/sched_fifo"]
 sched_rr = ["axtask/sched_rr"]
 
@@ -43,9 +43,9 @@ log-level-trace = ["axlog/log-level-trace"]
 platform-qemu-virt-riscv = ["axhal/platform-qemu-virt-riscv", "axdriver?/bus-mmio"]
 platform-qemu-virt-aarch64 = ["axhal/platform-qemu-virt-aarch64", "axdriver?/bus-mmio"]
 
-syscall = ["axruntime/syscall", "dep:axsyscall"]
+syscall = ["axruntime/syscall", "axtask/syscall", "axhal/syscall", "dep:axsyscall"]
 
-default = ["axtask?/sched_fifo"]
+default = []
 
 [dependencies]
 spinlock = { path = "../../crates/spinlock" }

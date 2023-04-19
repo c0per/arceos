@@ -3,7 +3,8 @@
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-mod io;
+pub mod io;
+pub mod task;
 pub mod time;
 
 #[derive(FromPrimitive)]
@@ -19,7 +20,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
         use SyscallId::*;
         match id {
             Write => io::write(args[0], args[1] as *const u8, args[2]),
-            Exit => axtask::exit(args[0] as i32),
+            Exit => task::exit(args[0] as i32),
             GetTimeOfDay => time::get_time_of_day(args[0] as *mut time::TimeVal, args[1]),
         }
     } else {
