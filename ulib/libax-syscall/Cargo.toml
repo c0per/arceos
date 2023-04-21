@@ -1,10 +1,9 @@
 [package]
-name = "time"
+name = "libax-syscall"
 version = "0.1.0"
 edition = "2021"
-authors = ["Jiayu Chen <c0percn@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libax = { path = "../../../ulib/libax-syscall", package = "libax-syscall" }
+axsyscall = { path = "../../modules/axsyscall" }

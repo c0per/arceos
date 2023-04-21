@@ -129,67 +129,25 @@ unsafe extern "C" fn context_switch(_current_task: &mut TaskContext, _next_task:
 }
 
 #[cfg(feature = "syscall")]
-pub fn enter_user() -> ! {
-    use axconfig::TASK_STACK_SIZE;
-    use riscv::register::sstatus::{self, Sstatus};
-    extern "C" {
-        fn _user_start();
-    }
+pub unsafe fn enter_user(trap_frame: &TrapFrame, kstack_top: usize) -> ! {
+    asm!(
+        "mv sp, {tf}", // set sp to TrapFrame
+        "li gp, 0", // set user gp, tp to 0
+        "li tp, 0",
 
-    static KERNEL_STACK: [u8; TASK_STACK_SIZE] = [0; TASK_STACK_SIZE];
-    static USER_STACK: [u8; TASK_STACK_SIZE] = [0; TASK_STACK_SIZE];
+        "LDR t0, sp, 31", // restore sstatus, sepc
+        "csrw sepc, t0",
+        "LDR t0, sp, 32",
+        "csrw sstatus, t0",
 
-    let mut trap_frame = TrapFrame::default();
+        "csrw sscratch, {kstack}", // store kernel_stack in sscratch
 
-    trap_frame.regs.sp = USER_STACK.as_ptr() as usize + TASK_STACK_SIZE;
-    trap_frame.sepc = _user_start as usize;
+        "POP_GENERAL_REGS", // restore other registers
+        "LDR sp, sp, 1", // set sp to user_stack
 
-    // restore kernel gp, tp
-    let tp: usize;
-    let gp: usize;
-    unsafe {
-        asm!(
-            "mv {}, tp",
-            "mv {}, gp",
-            out(reg) tp,
-            out(reg) gp,
-        );
-    }
-    trap_frame.regs.tp = tp;
-    trap_frame.regs.gp = gp;
-
-    unsafe {
-        core::ptr::write(
-            (KERNEL_STACK.as_ptr() as usize + TASK_STACK_SIZE - core::mem::size_of::<TrapFrame>())
-                as *mut TrapFrame,
-            trap_frame.clone(),
-        );
-    }
-
-    // set SPP to User
-    let sstatus_reg = sstatus::read();
-    trap_frame.sstatus = unsafe { *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) };
-
-    unsafe {
-        asm!(
-            "mv sp, {tf}", // set sp to TrapFrame
-            "li gp, 0", // set user gp, tp to 0
-            "li tp, 0",
-
-            "LDR t0, sp, 31", // restore sstatus, sepc
-            "csrw sepc, t0",
-            "LDR t0, sp, 32",
-            "csrw sstatus, t0",
-
-            "csrw sscratch, {kstack}", // store kernel_stack in sscratch
-
-            "POP_GENERAL_REGS", // restore other registers
-            "LDR sp, sp, 1", // set sp to user_stack
-
-            "sret",
-            tf = in(reg) &trap_frame as *const TrapFrame,
-            kstack = in(reg) KERNEL_STACK.as_ptr() as usize + TASK_STACK_SIZE,
-            options(noreturn)
-        );
-    }
+        "sret",
+        tf = in(reg) trap_frame as *const TrapFrame,
+        kstack = in(reg) kstack_top,
+        options(noreturn)
+    );
 }

@@ -1,2 +1,9 @@
 [profile.release]
 lto = true
+
+[build]
+target = "riscv64gc-unknown-none-elf"
+
+[unstable]
+build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins-mem"]

@@ -150,3 +150,174 @@ pub fn run_idle() -> ! {
         axhal::arch::wait_for_irqs();
     }
 }
+
+cfg_if::cfg_if! {
+if #[cfg(feature = "syscall")] {
+
+use core::{alloc::Layout, arch::asm, borrow::Borrow, ptr::NonNull, sync::atomic::AtomicUsize};
+
+use axconfig::TASK_STACK_SIZE;
+use axhal::{
+    arch::{enter_user, write_page_table_root},
+    mem::virt_to_phys,
+    paging::MappingFlags,
+};
+use axmem::MemorySet;
+use memory_addr::{VirtAddr, PAGE_SIZE_4K};
+use riscv::register::sstatus::{self, set_sum, Sstatus};
+// use task::TaskStack;
+
+extern crate alloc;
+
+pub struct TaskStack {
+    ptr: NonNull<u8>,
+    layout: Layout,
+}
+
+impl TaskStack {
+    pub fn new(ptr: NonNull<u8>, layout: Layout) -> Self {
+        Self { ptr, layout }
+    }
+
+    pub fn alloc(size: usize) -> Self {
+        let layout = Layout::from_size_align(size, 16).unwrap();
+        Self {
+            ptr: NonNull::new(unsafe { alloc::alloc::alloc(layout) }).unwrap(),
+            layout,
+        }
+    }
+
+    pub const fn top(&self) -> VirtAddr {
+        unsafe { core::mem::transmute(self.ptr.as_ptr().add(self.layout.size())) }
+    }
+
+    pub fn bottom(&self) -> VirtAddr {
+        VirtAddr::from(self.ptr.as_ptr() as usize)
+    }
+}
+
+impl Drop for TaskStack {
+    fn drop(&mut self) {
+        unsafe { alloc::alloc::dealloc(self.ptr.as_ptr(), self.layout) }
+    }
+}
+
+pub struct Task {
+    pid: usize,
+    tid: usize,
+
+    entry_point: u64,
+    memory_set: MemorySet,
+
+    /// TaskStack is simply a pointer to memory in memory_set.
+    /// Kernel stack is mapped in "free memory" region.
+    kstack: TaskStack,
+    /// User stack is mapped in user space (highest address)
+    ustack: TaskStack,
+}
+
+impl Task {
+    pub fn from_elf_data(elf_data: &[u8]) -> Self {
+        let mut memory_set = MemorySet::new_with_kernel_mapped();
+
+        unsafe {
+            write_page_table_root(memory_set.page_table_root_ppn());
+        }
+
+        let elf = xmas_elf::ElfFile::new(elf_data).expect("Error parsing app ELF file.");
+        memory_set.map_elf(&elf);
+
+        let kstack = TaskStack::alloc(axconfig::TASK_STACK_SIZE);
+
+        // This should be aligned to 4K
+        let max_va = VirtAddr::from(
+            elf.program_iter()
+                .map(|ph| {
+                    if ph.get_type() == Ok(xmas_elf::program::Type::Load) {
+                        ph.virtual_addr()
+                    } else {
+                        0
+                    }
+                })
+                .max()
+                .unwrap_or_default() as usize,
+        );
+
+        // skip protection page
+        let ustack_bottom = max_va + PAGE_SIZE_4K;
+
+        // Allocate memory and hold it in memory_set
+        memory_set.alloc_region(
+            ustack_bottom,
+            axconfig::TASK_STACK_SIZE,
+            MappingFlags::USER | MappingFlags::READ | MappingFlags::WRITE,
+            None,
+        );
+
+        let ustack = TaskStack::new(
+            NonNull::new(usize::from(ustack_bottom) as *mut u8)
+                .expect("Error creating NonNull<u8> for ustack bottom"),
+            Layout::from_size_align(axconfig::TASK_STACK_SIZE, 16)
+                .expect("Error creating layout for ustack"),
+        );
+
+        let pid = TASK_ID_ALLOCATOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+
+        Self {
+            pid,
+            tid: pid,
+            entry_point: elf.header.pt2.entry_point(),
+            memory_set,
+            kstack,
+            ustack,
+        }
+    }
+
+    /// For Init (pid = 1) task only.
+    /// Wwitch to its page_table
+    /// Create a dummy TrapFrame to go to _user_start
+    pub unsafe fn enter_as_init(&self) -> ! {
+        use axhal::arch::TrapFrame;
+
+        if self.pid != 1 || self.tid != 1 {
+            panic!("Calling enter_user() for task other than (1, 1)");
+        }
+
+        let mut trap_frame = TrapFrame::default();
+
+        trap_frame.regs.sp = self.ustack.top().into();
+        trap_frame.sepc = self.entry_point as usize;
+
+        // restore kernel gp, tp
+        let tp: usize;
+        let gp: usize;
+        unsafe {
+            asm!(
+                "mv {}, tp",
+                "mv {}, gp",
+                out(reg) tp,
+                out(reg) gp,
+            );
+        }
+        trap_frame.regs.tp = tp;
+        trap_frame.regs.gp = gp;
+
+        // TODO: need?
+        core::ptr::write(
+            (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame,
+            trap_frame.clone(),
+        );
+
+        // set SPP to User, SUM to 1
+        let sstatus_reg = sstatus::read();
+        trap_frame.sstatus =
+            *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) | (1 << 18);
+
+        enter_user(&trap_frame, self.kstack.top().into());
+    }
+}
+
+static TASK_ID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
+
+}
+}
