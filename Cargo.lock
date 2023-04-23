@@ -310,6 +310,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "axprocess"
+version = "0.1.0"
+dependencies = [
+ "axconfig",
+ "axhal",
+ "axmem",
+ "axsyscall",
+ "crate_interface",
+ "kernel_guard",
+ "riscv",
+ "xmas-elf",
+]
+
+[[package]]
 name = "axruntime"
 version = "0.1.0"
 dependencies = [
@@ -322,6 +336,7 @@ dependencies = [
  "axlog",
  "axmem",
  "axnet",
+ "axprocess",
  "axsyscall",
  "axtask",
  "cfg-if",
@@ -962,7 +977,6 @@ dependencies = [
  "axnet",
  "axruntime",
  "axsync",
- "axsyscall",
  "axtask",
  "cfg-if",
  "spinlock",

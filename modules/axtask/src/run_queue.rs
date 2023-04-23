@@ -135,6 +135,28 @@ impl AxRunQueue {
             self.resched_inner(false);
         }
     }
+
+    /* #[cfg(feature = "syscall")]
+    pub fn switch_to_init(&mut self) -> ! {
+        let Some(init_task) = self.scheduler.pick_next_task() else {
+            panic!("Error picking out init task.");
+        };
+        assert_eq!(
+            init_task.state,
+            TaskState::Ready,
+            "Init task isn't Ready state."
+        );
+
+        init_task.set_state(TaskState::Running);
+
+        let trap_frame = init_task.dummy_trap_frame();
+        let kstack_top = init_task.kstack.top();
+
+        unsafe {
+            CurrentTask::init_current(init_task);
+            axhal::arch::enter_user(&trap_frame, kstack_top.into());
+        }
+    } */
 }
 
 impl AxRunQueue {
@@ -154,6 +176,15 @@ impl AxRunQueue {
         });
         self.switch_to(prev, next);
     }
+
+    /* #[cfg(feature = "syscall")]
+    fn switch_to(&mut self, prev_task: CurrentTask, next_task: AxTaskRef) {
+        // trace!(
+        //     "context switch: {} -> {}",
+        //     prev_task.id_name(),
+        //     next_task.id_name()
+        // );
+    } */
 
     fn switch_to(&mut self, prev_task: CurrentTask, next_task: AxTaskRef) {
         trace!(
@@ -212,6 +243,14 @@ pub(crate) fn init() {
     RUN_QUEUE.init_by(AxRunQueue::new());
     unsafe { CurrentTask::init_current(main_task) }
 }
+
+/* #[cfg(feature = "syscall")]
+pub(crate) fn init_empty() {
+    let scheduler = Scheduler::new();
+    let run_queue = SpinNoIrq::new(AxRunQueue { scheduler });
+
+    RUN_QUEUE.init_by(run_queue);
+} */
 
 pub(crate) fn init_secondary() {
     let idle_task = TaskInner::new_init("idle");

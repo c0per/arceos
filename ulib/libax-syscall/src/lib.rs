@@ -4,8 +4,8 @@
 
 extern crate core;
 
-pub mod syscall;
 pub mod io;
+pub mod syscall;
 pub mod time;
 
 #[no_mangle]

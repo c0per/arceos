@@ -22,14 +22,6 @@ preempt = ["percpu?/preempt"]
 sched_fifo = ["multitask"]
 sched_rr = ["multitask", "preempt"]
 
-syscall = [
-    "dep:axsyscall",
-    "dep:axconfig",
-    "dep:memory_addr",
-    "dep:riscv",
-    "dep:xmas-elf",
-    "dep:axmem",
-]
 default = []
 
 [dependencies]

@@ -255,7 +255,7 @@ impl Drop for TaskInner {
     }
 }
 
-struct TaskStack {
+pub(crate) struct TaskStack {
     ptr: NonNull<u8>,
     layout: Layout,
 }
@@ -271,6 +271,10 @@ impl TaskStack {
 
     pub const fn top(&self) -> VirtAddr {
         unsafe { core::mem::transmute(self.ptr.as_ptr().add(self.layout.size())) }
+    }
+
+    pub const fn bottom(&self) -> VirtAddr {
+        VirtAddr::from(self.ptr.as_ptr() as usize)
     }
 }
 

@@ -12,12 +12,25 @@ paging = ["alloc", "axhal/paging", "dep:lazy_init"]
 multitask = ["alloc", "axtask/multitask"]
 smp = ["axhal/smp", "spinlock/smp"]
 
-fs = ["alloc", "paging", "axdriver/virtio-blk", "axfs/use-virtio-blk"] # TODO: remove "paging"
+fs = [
+    "alloc",
+    "paging",
+    "axdriver/virtio-blk",
+    "axfs/use-virtio-blk",
+] # TODO: remove "paging"
 net = ["alloc", "paging", "axdriver/virtio-net", "dep:axnet"]
 display = ["alloc", "paging", "axdriver/virtio-gpu", "dep:axdisplay"]
 
 no_mmu = ["axhal/no_mmu", "axconfig/no_mmu"]
-syscall = ["axhal/syscall", "axtask/syscall", "dep:axsyscall", "dep:num-traits", "dep:xmas-elf", "dep:axmem", "paging"]
+syscall = [
+    "dep:axprocess",
+    "axhal/syscall",
+    "dep:axsyscall",
+    "dep:num-traits",
+    "dep:xmas-elf",
+    "dep:axmem",
+    "paging",
+]
 
 default = []
 
@@ -35,9 +48,10 @@ axlog = { path = "../axlog" }
 axfs = { path = "../axfs", optional = true }
 axnet = { path = "../axnet", optional = true }
 axdisplay = { path = "../axdisplay", optional = true }
-axtask = { path = "../axtask", default-features = false }
+axtask = { path = "../axtask", default-features = false, optional = true }
 axsyscall = { path = "../axsyscall", optional = true }
 axmem = { path = "../axmem", optional = true }
+axprocess = { path = "../axprocess", optional = true }
 cfg-if = "1.0.0"
 num-traits = { version = "0.2.15", default-features = false, optional = true }
 xmas-elf = { version = "0.9.0", optional = true }

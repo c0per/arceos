@@ -145,12 +145,9 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
 
     #[cfg(feature = "syscall")]
     {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "multitask")] {
-                todo!()
-            } else {
-                load_app();
-            }
+        let task = load_app();
+        unsafe {
+            task.enter_as_init();
         }
     }
 
@@ -250,7 +247,7 @@ fn init_interrupt() {
 }
 
 #[cfg(feature = "syscall")]
-fn load_app() -> ! {
+fn load_app() -> axprocess::Task {
     extern "C" {
         fn app_start();
         fn app_end();
@@ -261,14 +258,10 @@ fn load_app() -> ! {
         paging::{MappingFlags, PageTable},
     };
     use axmem::MemorySet;
-    use axtask::Task;
 
     info!("app elf: {:x} - {:x}", app_start as usize, app_end as usize);
     let app_data_len = app_end as usize - app_start as usize;
     let elf_data = unsafe { core::slice::from_raw_parts(app_start as *const u8, app_data_len) };
 
-    let task = Task::from_elf_data(elf_data);
-    unsafe {
-        task.enter_as_init();
-    }
+    axprocess::Task::from_elf_data(elf_data)
 }
