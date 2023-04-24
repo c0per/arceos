@@ -115,6 +115,9 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     #[cfg(feature = "multitask")]
     axtask::init_scheduler();
 
+    #[cfg(feature = "syscall")]
+    axprocess::scheduler::init();
+
     #[cfg(any(feature = "fs", feature = "net", feature = "display"))]
     {
         #[allow(unused_variables)]
@@ -146,9 +149,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     #[cfg(feature = "syscall")]
     {
         let task = load_app();
-        unsafe {
-            task.enter_as_init();
-        }
+        axprocess::scheduler::start(task);
     }
 
     #[cfg(not(feature = "syscall"))]

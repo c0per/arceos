@@ -14,6 +14,9 @@ axsyscall = { path = "../axsyscall" }
 
 crate_interface = { path = "../../crates/crate_interface" }
 kernel_guard = { path = "../../crates/kernel_guard" }
+scheduler = { path = "../../crates/scheduler" }
+lazy_init = { path = "../../crates/lazy_init" }
+spinlock = { path = "../../crates/spinlock" }
 
 riscv = "0.10.1"
 xmas-elf = "0.9.0"

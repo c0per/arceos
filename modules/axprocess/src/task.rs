@@ -7,7 +7,12 @@ use axhal::{
     paging::MappingFlags,
 };
 use axmem::MemorySet;
-use core::{alloc::Layout, arch::asm, ptr::NonNull, sync::atomic::AtomicUsize};
+use core::{
+    alloc::Layout,
+    arch::asm,
+    ptr::NonNull,
+    sync::atomic::{AtomicU8, AtomicUsize, Ordering},
+};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -21,7 +26,7 @@ pub enum TaskState {
 pub struct Task {
     pid: usize,
     tid: usize,
-    state: TaskState,
+    state: AtomicU8,
 
     entry_point: u64,
     memory_set: MemorySet,
@@ -88,7 +93,7 @@ impl Task {
         Self {
             pid,
             tid: pid,
-            state: TaskState::Ready,
+            state: AtomicU8::new(TaskState::Ready as u8),
             entry_point: elf.header.pt2.entry_point(),
             memory_set,
             kstack,
@@ -96,16 +101,24 @@ impl Task {
         }
     }
 
-    pub fn set_state(&mut self, state: TaskState) {
-        self.state = state;
+    pub fn set_state(&self, state: TaskState) {
+        self.state.store(state as u8, Ordering::Release);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.state.load(Ordering::Acquire) == TaskState::Running as u8
     }
 
     pub fn is_ready(&self) -> bool {
-        self.state == TaskState::Ready
+        self.state.load(Ordering::Acquire) == TaskState::Ready as u8
     }
 
     pub fn is_blocked(&self) -> bool {
-        self.state == TaskState::Blocked
+        self.state.load(Ordering::Acquire) == TaskState::Blocked as u8
+    }
+
+    pub fn is_init(&self) -> bool {
+        self.pid == 1
     }
 
     pub fn dummy_trap_frame(&self) -> axhal::arch::TrapFrame {

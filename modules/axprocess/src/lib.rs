@@ -3,11 +3,12 @@
 #[macro_use]
 extern crate alloc;
 
+pub mod scheduler;
 mod stack;
 mod syscall;
 mod task;
 
-pub use task::Task;
+pub use task::{Task, TaskState};
 
 struct KernelGuardIfImpl;
 
