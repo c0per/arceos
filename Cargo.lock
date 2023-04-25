@@ -319,7 +319,11 @@ dependencies = [
  "axsyscall",
  "crate_interface",
  "kernel_guard",
+ "lazy_init",
+ "log",
  "riscv",
+ "scheduler",
+ "spinlock",
  "xmas-elf",
 ]
 
@@ -798,6 +802,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "fork"
+version = "0.1.0"
+dependencies = [
+ "libax-syscall",
 ]
 
 [[package]]

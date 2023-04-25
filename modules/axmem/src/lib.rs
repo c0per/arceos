@@ -17,7 +17,13 @@ use axhal::{
 /// PageTable + MemoryArea for a process (task)
 pub struct MemorySet {
     page_table: PageTable,
-    owned_mem: Vec<GlobalPage>,
+    owned_mem: Vec<MapArea>,
+}
+
+pub struct MapArea {
+    pub pages: GlobalPage,
+    pub vaddr: VirtAddr,
+    pub flags: MappingFlags,
 }
 
 impl MemorySet {
@@ -75,6 +81,14 @@ impl MemorySet {
         self.page_table.root_paddr()
     }
 
+    pub fn max_va(&self) -> VirtAddr {
+        self.owned_mem
+            .iter()
+            .map(|MapArea { pages, vaddr, .. }| *vaddr + pages.size())
+            .max()
+            .unwrap_or_default()
+    }
+
     pub fn map_region(
         &mut self,
         vaddr: VirtAddr,
@@ -113,6 +127,28 @@ impl MemorySet {
             pages.as_slice_mut()[..data.len()].copy_from_slice(data);
         }
 
-        self.owned_mem.push(pages);
+        self.owned_mem.push(MapArea {
+            pages,
+            vaddr,
+            flags,
+        });
+    }
+
+    // for fork
+    pub fn clone_mapped(&self) -> Self {
+        let mut new = Self::new_with_kernel_mapped();
+
+        self.owned_mem.iter().for_each(
+            |MapArea {
+                 pages,
+                 vaddr,
+                 flags,
+             }| {
+                let data = pages.as_slice();
+                new.alloc_region(*vaddr, pages.size(), *flags, Some(data));
+            },
+        );
+
+        new
     }
 }

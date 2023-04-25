@@ -1,15 +1,16 @@
-use crate::stack::TaskStack;
-use alloc::string::String;
+use crate::{scheduler::CurrentTask, stack::TaskStack};
+use alloc::{string::String, sync::Arc};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
-    arch::enter_user,
-    mem::{VirtAddr, PAGE_SIZE_4K},
+    arch::{enter_user, TaskContext, TrapFrame},
+    mem::{PhysAddr, VirtAddr, PAGE_SIZE_4K},
     paging::MappingFlags,
 };
 use axmem::MemorySet;
 use core::{
     alloc::Layout,
     arch::asm,
+    cell::UnsafeCell,
     ptr::NonNull,
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
@@ -24,12 +25,13 @@ pub enum TaskState {
 }
 
 pub struct Task {
-    pid: usize,
-    tid: usize,
+    pub pid: usize,
+    pub tid: usize,
     state: AtomicU8,
+    ctx: UnsafeCell<TaskContext>,
 
     entry_point: u64,
-    memory_set: MemorySet,
+    memory_set: Arc<MemorySet>,
 
     /// TaskStack is simply a pointer to memory in memory_set.
     /// Kernel stack is mapped in "free memory" region.
@@ -88,14 +90,15 @@ impl Task {
                 .expect("Error creating layout for ustack"),
         );
 
-        let pid = TASK_ID_ALLOCATOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed);
 
         Self {
             pid,
             tid: pid,
             state: AtomicU8::new(TaskState::Ready as u8),
+            ctx: UnsafeCell::new(TaskContext::new()),
             entry_point: elf.header.pt2.entry_point(),
-            memory_set,
+            memory_set: Arc::new(memory_set),
             kstack,
             ustack,
         }
@@ -121,6 +124,10 @@ impl Task {
         self.pid == 1
     }
 
+    pub fn page_table_ppn(&self) -> PhysAddr {
+        self.memory_set.page_table_root_ppn()
+    }
+
     pub fn dummy_trap_frame(&self) -> axhal::arch::TrapFrame {
         use axhal::arch::TrapFrame;
         use riscv::register::sstatus::{self, Sstatus};
@@ -144,15 +151,6 @@ impl Task {
         trap_frame.regs.tp = tp;
         trap_frame.regs.gp = gp;
 
-        // TODO: need?
-        unsafe {
-            core::ptr::write(
-                (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>())
-                    as *mut TrapFrame,
-                trap_frame.clone(),
-            );
-        }
-
         // set SPP to User, SUM to 1
         let sstatus_reg = sstatus::read();
         unsafe {
@@ -163,6 +161,14 @@ impl Task {
         trap_frame
     }
 
+    pub fn trap_frame_ptr(&self) -> *const axhal::arch::TrapFrame {
+        (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *const TrapFrame
+    }
+
+    pub fn ctx_mut_ptr(&self) -> *mut TaskContext {
+        self.ctx.get()
+    }
+
     /// For Init (pid = 1) task only.
     /// Wwitch to its page_table
     /// Create a dummy TrapFrame to go to _user_start
@@ -171,7 +177,16 @@ impl Task {
             panic!("Calling enter_user() for task other than (1, 1)");
         }
 
+        self.set_state(TaskState::Running);
+
         let trap_frame = self.dummy_trap_frame();
+        unsafe {
+            core::ptr::write(
+                (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>())
+                    as *mut TrapFrame,
+                trap_frame.clone(),
+            );
+        }
 
         enter_user(&trap_frame, self.kstack.top().into());
     }
@@ -180,6 +195,64 @@ impl Task {
 
     pub fn id_name(&self) -> String {
         format!("Task({}, {})", self.pid, self.tid)
+    }
+
+    // fork
+    pub fn clone(&self) -> Self {
+        extern "C" {
+            fn task_entry();
+        }
+
+        let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Release);
+
+        let mut memory_set = self.memory_set.clone_mapped();
+
+        // Create new U stack
+        // let max_va = memory_set.max_va();
+        // let ustack_bottom = max_va + PAGE_SIZE_4K;
+        // memory_set.alloc_region(
+        //     ustack_bottom,
+        //     TASK_STACK_SIZE,
+        //     MappingFlags::USER | MappingFlags::READ | MappingFlags::WRITE,
+        //     None,
+        // );
+        // let ustack = TaskStack::new(
+        //     NonNull::new(usize::from(ustack_bottom) as *mut u8)
+        //         .expect("Error creating NonNull<u8> for ustack bottom"),
+        //     Layout::from_size_align(axconfig::TASK_STACK_SIZE, 16)
+        //         .expect("Error creating layout for ustack"),
+        // );
+
+        // Create new S stack
+        let kstack = TaskStack::alloc(axconfig::TASK_STACK_SIZE);
+        let trap_frame =
+            (usize::from(kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame;
+        unsafe {
+            core::ptr::copy_nonoverlapping(self.trap_frame_ptr(), trap_frame, 1);
+        }
+
+        let trap_frame = unsafe { &mut *trap_frame };
+        trap_frame.regs.a0 = 0;
+        // trap_frame.regs.sp = ustack.top().into();
+
+        let mut ctx = TaskContext::new();
+        ctx.init(
+            task_entry as usize,
+            kstack.top() - core::mem::size_of::<TrapFrame>(),
+        );
+
+        Self {
+            pid,
+            tid: pid,
+            state: AtomicU8::new(TaskState::Ready as u8),
+            ctx: UnsafeCell::new(ctx),
+
+            entry_point: self.entry_point,
+            memory_set: Arc::new(memory_set),
+
+            kstack,
+            ustack: self.ustack.clone(),
+        }
     }
 }
 

@@ -6,6 +6,7 @@ extern crate core;
 
 pub mod io;
 pub mod syscall;
+pub mod task;
 pub mod time;
 
 #[no_mangle]
@@ -18,7 +19,7 @@ pub extern "C" fn _user_start() {
 
     let return_value = unsafe { main() };
 
-    syscall::exit(return_value);
+    task::exit(return_value);
 }
 
 #[linkage = "weak"]

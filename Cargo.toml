@@ -13,6 +13,7 @@ members = [
     "apps/task/sleep",
     "apps/task/yield",
     "apps/syscall/time",
+    "apps/syscall/fork",
 
     "crates/allocator",
     "crates/arm_gic",

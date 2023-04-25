@@ -15,11 +15,6 @@ pub(crate) fn syscall(id: SyscallId, args: [usize; 4]) -> isize {
     ret
 }
 
-pub fn exit(status: i32) -> ! {
-    syscall(SyscallId::Exit, [status as usize, 0, 0, 0]);
-    unreachable!("Task already called exit().")
-}
-
 pub fn write(fd: usize, buf: *const u8, len: usize) -> isize {
     syscall(SyscallId::Write, [fd, buf as usize, len, 0])
 }
@@ -40,5 +35,5 @@ fn panic(info: &PanicInfo) -> ! {
         crate::println!("Panicked: {}", err);
     }
 
-    exit(-1);
+    crate::task::exit(-1);
 }

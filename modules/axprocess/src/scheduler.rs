@@ -1,7 +1,7 @@
-use core::{mem::ManuallyDrop, ops::Deref};
-
 use crate::{Task, TaskState};
 use alloc::sync::Arc;
+use axhal::arch::write_page_table_root;
+use core::{mem::ManuallyDrop, ops::Deref};
 use lazy_init::LazyInit;
 use scheduler::{BaseScheduler, FifoTask};
 use spinlock::SpinNoIrq;
@@ -37,8 +37,63 @@ impl Scheduler {
             axhal::misc::terminate();
         } else {
             curr.0.set_state(TaskState::Exited);
+
+            self.reschedule();
         }
-        unreachable!("TODO");
+        unreachable!("Task already exited");
+    }
+
+    pub fn yield_current(&mut self) {
+        self.reschedule();
+    }
+
+    pub fn clone_current(&mut self) -> usize {
+        let mut curr = CurrentTask::try_get().expect("Current task not found");
+
+        let new_task = curr.clone();
+        let new_tid = new_task.tid;
+
+        self.add_task(new_task);
+
+        new_tid
+    }
+}
+
+impl Scheduler {
+    fn reschedule(&mut self) {
+        debug!("re-scheduling");
+        let prev = CurrentTask::try_get().expect("Current task not found");
+        if prev.is_running() {
+            prev.set_state(TaskState::Ready);
+            self.0.put_prev_task(prev.0.deref().clone(), false);
+        }
+
+        let next = self.0.pick_next_task().expect("TODO: idle task");
+
+        self.switch_to(prev, next);
+    }
+
+    fn switch_to(&mut self, prev: CurrentTask, next: Arc<AxTask>) {
+        next.set_state(TaskState::Running);
+
+        let prev_ctx = prev.ctx_mut_ptr();
+        let next_ctx = next.ctx_mut_ptr();
+
+        let next_pid = next.pid;
+        let next_tid = next.tid;
+
+        let next_page_table_ppn = next.page_table_ppn();
+
+        CurrentTask::set(next);
+
+        debug!(
+            "[switch] from ({}, {}) to ({}, {})",
+            prev.pid, prev.tid, next_pid, next_tid
+        );
+        unsafe {
+            write_page_table_root(next_page_table_ppn);
+            (*prev_ctx).switch_to(&mut *next_ctx);
+        }
     }
 }
 

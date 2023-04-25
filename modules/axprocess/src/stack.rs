@@ -2,6 +2,7 @@ use core::{alloc::Layout, ptr::NonNull};
 
 use axhal::mem::VirtAddr;
 
+#[derive(Clone)]
 pub(crate) struct TaskStack {
     ptr: NonNull<u8>,
     layout: Layout,

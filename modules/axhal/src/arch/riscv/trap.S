@@ -39,6 +39,7 @@
 .section .text
 .balign 4
 .global trap_vector_base
+.global task_entry
 trap_vector_base:
     // sscratch == 0: trap from S mode
     // sscratch != 0: trap from U mode
@@ -61,5 +62,6 @@ trap_vector_base:
     mv      a0, sp
     li      a1, 1
     call    riscv_trap_handler
+task_entry:
     RESTORE_REGS 1
     sret
