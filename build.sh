@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+export LOG=info
+
+# go to modules/axuser to build kernel
+rm kernel.bin
+cd modules/axuser
+cargo b -p axuser
+cd -
+rust-objcopy -B riscv64 -S -O binary target/riscv64gc-unknown-none-elf/debug/axuser kernel.bin
+
+# build testsuits
+# cd testsuits/riscv-syscalls-testing/user
+# rm -r ./build ./riscv64
+# ./build-oscomp.sh
+# cd -
+
+# run qemu
+qemu-system-riscv64 -machine virt -m 128M -smp 1 \
+    -bios default -kernel kernel.bin -nographic \
+    -device virtio-blk-device,drive=disk0 \
+    -drive id=disk0,if=none,format=raw,file=disk.img

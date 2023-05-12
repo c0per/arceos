@@ -1,0 +1,4 @@
+[submodule "testsuits"]
+	path = testsuits
+	url = git@github.com:oscomp/testsuits-for-oskernel.git
+	branch = pre-2023

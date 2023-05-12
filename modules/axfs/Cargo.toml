@@ -14,7 +14,7 @@ devfs = ["dep:axfs_devfs"]
 ramfs = []
 fatfs = ["dep:fatfs"]
 
-default = ["use-ramdisk", "devfs", "ramfs", "fatfs"]
+default = ["use-virtio-blk", "devfs", "ramfs", "fatfs"]
 
 [dependencies]
 log = "0.4"

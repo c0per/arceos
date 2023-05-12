@@ -148,8 +148,16 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
 
     #[cfg(feature = "syscall")]
     {
-        let task = load_app();
-        axprocess::scheduler::start(task);
+        #[cfg(feature = "fs")]
+        {
+            let task = load_app("time");
+            axprocess::scheduler::start(task);
+        }
+        #[cfg(not(feature = "fs"))]
+        {
+            let task = load_app();
+            axprocess::scheduler::start(task);
+        }
     }
 
     #[cfg(not(feature = "syscall"))]
@@ -247,7 +255,7 @@ fn init_interrupt() {
     axhal::arch::enable_irqs();
 }
 
-#[cfg(feature = "syscall")]
+#[cfg(all(feature = "syscall", not(feature = "fs")))]
 fn load_app() -> axprocess::Task {
     extern "C" {
         fn app_start();
@@ -265,4 +273,14 @@ fn load_app() -> axprocess::Task {
     let elf_data = unsafe { core::slice::from_raw_parts(app_start as *const u8, app_data_len) };
 
     axprocess::Task::from_elf_data(elf_data)
+}
+
+#[cfg(all(feature = "syscall", feature = "fs"))]
+fn load_app(name: &str) -> axprocess::Task {
+    info!("app name: {}", name);
+    let elf_data = axfs::api::read(name).expect("error calling axfs::api::read on init app");
+
+    info!("app elf data length: {}", elf_data.len());
+
+    axprocess::Task::from_elf_data(&elf_data)
 }
