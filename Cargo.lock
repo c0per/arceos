@@ -314,7 +314,9 @@ name = "axprocess"
 version = "0.1.0"
 dependencies = [
  "axconfig",
+ "axfs",
  "axhal",
+ "axio",
  "axmem",
  "axsyscall",
  "crate_interface",

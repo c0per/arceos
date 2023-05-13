@@ -1,5 +1,9 @@
-use crate::{scheduler::CurrentTask, stack::TaskStack};
-use alloc::{string::String, sync::Arc};
+use crate::{
+    scheduler::CurrentTask,
+    stack::TaskStack,
+    stdio::{Stderr, Stdin, Stdout},
+};
+use alloc::{string::String, sync::Arc, vec, vec::Vec};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
     arch::{enter_user, TaskContext, TrapFrame},
@@ -10,7 +14,7 @@ use axmem::MemorySet;
 use core::{
     alloc::Layout,
     arch::asm,
-    cell::UnsafeCell,
+    cell::{RefCell, UnsafeCell},
     ptr::NonNull,
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
@@ -38,6 +42,9 @@ pub struct Task {
     kstack: TaskStack,
     /// User stack is mapped in user space (highest address)
     ustack: TaskStack,
+
+    #[cfg(feature = "fs")]
+    fd_table: Vec<Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>>,
 }
 
 unsafe impl Send for Task {}
@@ -101,6 +108,13 @@ impl Task {
             memory_set: Arc::new(memory_set),
             kstack,
             ustack,
+
+            #[cfg(feature = "fs")]
+            fd_table: vec![
+                Some(Arc::new(RefCell::new(Stdin))),
+                Some(Arc::new(RefCell::new(Stdout))),
+                Some(Arc::new(RefCell::new(Stderr))),
+            ],
         }
     }
 
@@ -252,6 +266,28 @@ impl Task {
 
             kstack,
             ustack: self.ustack.clone(),
+
+            #[cfg(feature = "fs")]
+            fd_table: self.fd_table.clone(),
+        }
+    }
+
+    #[cfg(feature = "fs")]
+    pub fn query_fd_mut(
+        &mut self,
+        fd: usize,
+    ) -> Option<&mut Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>> {
+        self.fd_table.get_mut(fd)
+    }
+
+    #[cfg(feature = "fs")]
+    pub fn query_fd(
+        &self,
+        fd: usize,
+    ) -> Option<&Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>> {
+        match self.fd_table.get(fd) {
+            Some(file) => file.as_ref(),
+            None => None,
         }
     }
 }

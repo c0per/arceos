@@ -5,10 +5,14 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
+mod fs;
 pub mod scheduler;
 mod stack;
 mod syscall;
 mod task;
+
+#[cfg(feature = "fs")]
+mod stdio;
 
 pub use task::{Task, TaskState};
 

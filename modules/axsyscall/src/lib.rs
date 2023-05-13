@@ -3,13 +3,16 @@
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-pub mod io;
+pub mod fs;
 pub mod task;
 pub mod time;
 
 #[derive(FromPrimitive)]
 #[repr(usize)]
 pub enum SyscallId {
+    OpenAt = 56,
+    Close = 57,
+    Read = 63,
     Write = 64,
     Exit = 93,
     SchedYield = 124,
@@ -17,11 +20,20 @@ pub enum SyscallId {
     Clone = 220,
 }
 
+/// syscall dispatcher
 pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
     if let Some(id) = SyscallId::from_usize(syscall_id) {
         use SyscallId::*;
         match id {
-            Write => io::write(args[0], args[1] as *const u8, args[2]),
+            OpenAt => fs::open_at(
+                args[0],
+                args[1] as *const u8,
+                args[2] as u32,
+                args[3] as i32,
+            ),
+            Close => fs::close(args[0]),
+            Read => fs::read(args[0], args[1] as *const u8, args[2]),
+            Write => fs::write(args[0], args[1] as *const u8, args[2]),
             Exit => task::exit(args[0] as i32),
             SchedYield => task::sched_yield(),
             GetTimeOfDay => time::get_time_of_day(args[0] as *mut time::TimeVal, args[1]),

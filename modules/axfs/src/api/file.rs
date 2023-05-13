@@ -178,3 +178,9 @@ impl Seek for File {
         self.inner.seek(pos)
     }
 }
+
+#[cfg(feature = "file-ext")]
+pub trait FileExt: Read + Write + Seek {}
+
+#[cfg(feature = "file-ext")]
+impl FileExt for File {}
