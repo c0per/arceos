@@ -229,7 +229,7 @@ name = "axfs_vfs"
 version = "0.1.0"
 dependencies = [
  "axerrno",
- "bitflags 2.1.0",
+ "bitflags 2.2.1",
  "log",
 ]
 
@@ -242,7 +242,7 @@ dependencies = [
  "axalloc",
  "axconfig",
  "axsyscall",
- "bitflags 2.1.0",
+ "bitflags 2.2.1",
  "cfg-if",
  "crate_interface",
  "handler_table",
@@ -319,6 +319,7 @@ dependencies = [
  "axio",
  "axmem",
  "axsyscall",
+ "bitflags 2.2.1",
  "crate_interface",
  "kernel_guard",
  "lazy_init",
@@ -446,9 +447,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.1.0"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c70beb79cbb5ce9c4f8e20849978f34225931f665bb49efa6982875a4d5facb3"
+checksum = "24a6904aef64d73cf10ab17ebace7befb918b82164785cb89907993be7f83813"
 
 [[package]]
 name = "bitmap-allocator"
@@ -481,7 +482,7 @@ name = "capability"
 version = "0.1.0"
 dependencies = [
  "axerrno",
- "bitflags 2.1.0",
+ "bitflags 2.2.1",
 ]
 
 [[package]]
@@ -1177,7 +1178,7 @@ dependencies = [
 name = "page_table_entry"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.1.0",
+ "bitflags 2.2.1",
  "cfg-if",
  "memory_addr",
  "x86_64",

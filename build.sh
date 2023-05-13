@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export LOG=info
+export LOG=debug
 
 # go to modules/axuser to build kernel
 rm kernel.bin

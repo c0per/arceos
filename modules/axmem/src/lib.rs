@@ -31,6 +31,11 @@ impl MemorySet {
         let mut page_table = PageTable::try_new().expect("Error allocating page table.");
 
         for r in memory_regions() {
+            debug!(
+                "mapping kernel region [0x{:x}, 0x{:x})",
+                usize::from(phys_to_virt(r.paddr)),
+                usize::from(phys_to_virt(r.paddr)) + r.size,
+            );
             page_table
                 .map_region(phys_to_virt(r.paddr), r.paddr, r.size, r.flags.into(), true)
                 .expect("Error mapping kernel memory");
@@ -66,6 +71,12 @@ impl MemorySet {
                 if ph.flags().is_execute() {
                     flags |= MappingFlags::EXECUTE;
                 }
+
+                debug!(
+                    "elf section [0x{:x}, 0x{:x})",
+                    ph.virtual_addr(),
+                    ph.virtual_addr() + ph.mem_size()
+                );
 
                 self.alloc_region(
                     (ph.virtual_addr() as usize).into(),
@@ -112,6 +123,14 @@ impl MemorySet {
         let num_pages = (size + PAGE_SIZE_4K - 1) / PAGE_SIZE_4K;
         let mut pages = GlobalPage::alloc_contiguous(num_pages, PAGE_SIZE_4K)
             .expect("Error allocating memory when trying to map");
+
+        debug!(
+            "allocating [0x{:x}, 0x{:x}) to [0x{:x}, 0x{:x})",
+            usize::from(vaddr),
+            usize::from(vaddr) + size,
+            usize::from(pages.start_vaddr()),
+            usize::from(pages.start_vaddr()) + pages.size(),
+        );
 
         self.map_region(
             vaddr,

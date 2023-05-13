@@ -16,7 +16,8 @@ use core::{
     alloc::Layout,
     arch::asm,
     cell::{RefCell, UnsafeCell},
-    ptr::NonNull,
+    mem::size_of,
+    ptr::{copy_nonoverlapping, NonNull},
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
 use spinlock::SpinNoIrq;
@@ -72,13 +73,14 @@ impl Task {
             elf.program_iter()
                 .map(|ph| {
                     if ph.get_type() == Ok(xmas_elf::program::Type::Load) {
-                        ph.virtual_addr()
+                        ph.virtual_addr() + ph.mem_size()
                     } else {
                         0
                     }
                 })
                 .max()
-                .unwrap_or_default() as usize,
+                .map(|elf_end| (elf_end as usize + PAGE_SIZE_4K - 1) / PAGE_SIZE_4K * PAGE_SIZE_4K)
+                .unwrap_or_default(),
         );
 
         // skip protection page
@@ -181,17 +183,43 @@ impl Task {
         self.ctx.get()
     }
 
-    /// For Init (pid = 1) task only.
-    /// Wwitch to its page_table
+    /// For Init (pid = 1) task only. Must be run after switching to user page table.
     /// Create a dummy TrapFrame to go to _user_start
-    pub unsafe fn enter_as_init(&self) -> ! {
+    /// argc = 1, arvg = `name`
+    pub unsafe fn enter_as_init(&self, name: &str) -> ! {
         if self.pid != 1 || self.tid != 1 {
             panic!("Calling enter_user() for task other than (1, 1)");
         }
 
         self.set_state(TaskState::Running);
 
-        let trap_frame = self.dummy_trap_frame();
+        let mut trap_frame = self.dummy_trap_frame();
+
+        // edit ustack sp, push in name and argc
+        unsafe { riscv::register::sstatus::set_sum() };
+        let sp = trap_frame.regs.sp;
+        let name_byte_len = name.bytes().len();
+        let name_buf_len =
+            (name_byte_len + 1 + size_of::<usize>() - 1) / size_of::<usize>() * size_of::<usize>();
+        // argc
+        let argc_ptr = (sp - size_of::<usize>()) as *mut isize;
+        *argc_ptr = 1;
+        // argv
+        let argv_ptr = (sp - size_of::<usize>() * 2) as *mut *mut *mut u8;
+        *argv_ptr = (sp - size_of::<usize>() * 3) as *mut *mut u8;
+        // argv[0]
+        let argv0_ptr = (sp - size_of::<usize>() * 3) as *mut *mut u8;
+        *argv0_ptr = (sp - size_of::<usize>() * 3 - name_buf_len) as *mut u8;
+        // name
+        unsafe {
+            copy_nonoverlapping(name.as_ptr(), *argv0_ptr, name_byte_len);
+            *((*argv0_ptr).offset(name_byte_len as isize)) = b'\0';
+        }
+
+        trap_frame.regs.sp -= size_of::<usize>() * 3 + name_buf_len;
+        trap_frame.regs.a0 = argc_ptr as usize;
+        trap_frame.regs.a1 = argv_ptr as usize;
+
         unsafe {
             core::ptr::write(
                 (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>())

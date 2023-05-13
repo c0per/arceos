@@ -17,7 +17,7 @@ impl Scheduler {
         self.0.add_task(Arc::new(FifoTask::new(task)));
     }
 
-    pub fn start(task: Task) -> ! {
+    pub fn start(task: Task, name: &str) -> ! {
         let task = Arc::new(scheduler::FifoTask::new(task));
         CurrentTask::init(task.clone());
 
@@ -29,7 +29,7 @@ impl Scheduler {
             let ptr = Arc::into_raw(task);
             Arc::decrement_strong_count(ptr);
 
-            (&*ptr).inner().enter_as_init();
+            (&*ptr).inner().enter_as_init(name);
         }
     }
 
@@ -145,6 +145,6 @@ pub fn init() {
     SCHEDULER.init_by(SpinNoIrq::new(Scheduler(scheduler)));
 }
 
-pub fn start(task: Task) -> ! {
-    Scheduler::start(task)
+pub fn start(task: Task, name: &str) -> ! {
+    Scheduler::start(task, name)
 }

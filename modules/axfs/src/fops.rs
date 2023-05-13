@@ -143,6 +143,11 @@ impl File {
         Self::_open_at(None, path, opts)
     }
 
+    /// Open file in a directory. The VfsNodeRef must be a directory.
+    pub fn open_at(dir: &VfsNodeRef, path: &str, opts: &OpenOptions) -> AxResult<Self> {
+        Self::_open_at(Some(dir), path, opts)
+    }
+
     pub fn truncate(&self, size: u64) -> AxResult {
         self.node.access(Cap::WRITE)?.truncate(size)?;
         Ok(())

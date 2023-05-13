@@ -1,3 +1,4 @@
+use axfs_vfs::VfsNodeRef;
 use axio::{prelude::*, Result, SeekFrom};
 use core::fmt;
 
@@ -67,6 +68,11 @@ impl OpenOptions {
     /// Opens a file at `path` with the options specified by `self`.
     pub fn open(&self, path: &str) -> Result<File> {
         fops::File::open(path, &self.0).map(|inner| File { inner })
+    }
+
+    /// Opens a file inside a directory `dir` at `path` with the options specified by `self`.
+    pub fn open_at(&self, dir: &VfsNodeRef, path: &str) -> Result<File> {
+        fops::File::open_at(dir, path, &self.0).map(|inner| File { inner })
     }
 }
 
