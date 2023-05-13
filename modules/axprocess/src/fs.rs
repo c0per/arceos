@@ -15,10 +15,9 @@ impl SyscallFs for SyscallFsImpl {
 
     fn close(fd: usize) -> isize {
         let current = CurrentTask::try_get().expect("No current task");
+        let mut fd_table = current.fd_table().lock();
 
-        todo!("requires mutability for current task")
-
-        /* if let Some(file) = current.query_fd_mut(fd) {
+        if let Some(file) = fd_table.query_fd_mut(fd) {
             file.take();
 
             0
@@ -26,15 +25,16 @@ impl SyscallFs for SyscallFsImpl {
             // closing a fd doesn't exist or alread closed
             // EBADF
             -1
-        } */
+        }
     }
 
     fn read(fd: usize, buf: *const u8, count: usize) -> isize {
         let current = CurrentTask::try_get().expect("No current task");
+        let fd_table = current.fd_table().lock();
 
         let buf = unsafe { from_raw_parts_mut(buf as *mut u8, count) };
 
-        if let Some(file) = current.query_fd(fd) {
+        if let Some(file) = fd_table.query_fd(fd) {
             file.borrow_mut().read(buf).map_or(-1, |res| res as isize)
         } else {
             -1
@@ -43,10 +43,11 @@ impl SyscallFs for SyscallFsImpl {
 
     fn write(fd: usize, buf: *const u8, count: usize) -> isize {
         let current = CurrentTask::try_get().expect("No current task");
+        let fd_table = current.fd_table().lock();
 
         let buf = unsafe { from_raw_parts(buf, count) };
 
-        if let Some(file) = current.query_fd(fd) {
+        if let Some(file) = fd_table.query_fd(fd) {
             file.borrow_mut().write(buf).map_or(-1, |res| res as isize)
         } else {
             -1

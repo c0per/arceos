@@ -1,4 +1,5 @@
 use crate::{
+    fd::FdList,
     scheduler::CurrentTask,
     stack::TaskStack,
     stdio::{Stderr, Stdin, Stdout},
@@ -18,6 +19,7 @@ use core::{
     ptr::NonNull,
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
+use spinlock::SpinNoIrq;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -44,7 +46,7 @@ pub struct Task {
     ustack: TaskStack,
 
     #[cfg(feature = "fs")]
-    fd_table: Vec<Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>>,
+    fd_table: SpinNoIrq<FdList>,
 }
 
 unsafe impl Send for Task {}
@@ -110,11 +112,7 @@ impl Task {
             ustack,
 
             #[cfg(feature = "fs")]
-            fd_table: vec![
-                Some(Arc::new(RefCell::new(Stdin))),
-                Some(Arc::new(RefCell::new(Stdout))),
-                Some(Arc::new(RefCell::new(Stderr))),
-            ],
+            fd_table: SpinNoIrq::new(FdList::default()),
         }
     }
 
@@ -268,27 +266,13 @@ impl Task {
             ustack: self.ustack.clone(),
 
             #[cfg(feature = "fs")]
-            fd_table: self.fd_table.clone(),
+            fd_table: SpinNoIrq::new(self.fd_table.lock().clone()),
         }
     }
 
     #[cfg(feature = "fs")]
-    pub fn query_fd_mut(
-        &mut self,
-        fd: usize,
-    ) -> Option<&mut Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>> {
-        self.fd_table.get_mut(fd)
-    }
-
-    #[cfg(feature = "fs")]
-    pub fn query_fd(
-        &self,
-        fd: usize,
-    ) -> Option<&Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>> {
-        match self.fd_table.get(fd) {
-            Some(file) => file.as_ref(),
-            None => None,
-        }
+    pub fn fd_table(&self) -> &SpinNoIrq<FdList> {
+        &self.fd_table
     }
 }
 

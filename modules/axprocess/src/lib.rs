@@ -14,6 +14,9 @@ mod task;
 #[cfg(feature = "fs")]
 mod stdio;
 
+#[cfg(feature = "fs")]
+mod fd;
+
 pub use task::{Task, TaskState};
 
 struct KernelGuardIfImpl;

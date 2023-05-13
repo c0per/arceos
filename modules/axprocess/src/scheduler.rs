@@ -22,6 +22,9 @@ impl Scheduler {
         CurrentTask::init(task.clone());
 
         unsafe {
+            // Task only exists in CurrentTask when excuting.
+            assert_eq!(Arc::strong_count(&task), 2);
+
             // enter_as_init won't return, we need to decrement the Arc count.
             let ptr = Arc::into_raw(task);
             Arc::decrement_strong_count(ptr);
