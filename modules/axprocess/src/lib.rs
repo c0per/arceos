@@ -10,6 +10,7 @@ pub mod scheduler;
 mod stack;
 mod syscall;
 mod task;
+mod utils;
 
 #[cfg(feature = "fs")]
 mod stdio;

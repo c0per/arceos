@@ -151,7 +151,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
         #[cfg(feature = "fs")]
         {
             let task = load_app("open");
-            axprocess::scheduler::start(task, "open");
+            axprocess::scheduler::start(task);
         }
         #[cfg(not(feature = "fs"))]
         {
@@ -282,5 +282,5 @@ fn load_app(name: &str) -> axprocess::Task {
 
     info!("app elf data length: {}", elf_data.len());
 
-    axprocess::Task::from_elf_data(&elf_data)
+    axprocess::Task::from_elf_data(&elf_data, &[name])
 }

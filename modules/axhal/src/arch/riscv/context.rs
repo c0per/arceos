@@ -129,7 +129,7 @@ unsafe extern "C" fn context_switch(_current_task: &mut TaskContext, _next_task:
 }
 
 #[cfg(feature = "syscall")]
-pub unsafe fn enter_user(trap_frame: &TrapFrame, kstack_top: usize) -> ! {
+pub unsafe fn enter_user(kstack_top: usize) -> ! {
     asm!(
         "mv sp, {tf}", // set sp to TrapFrame
         "li gp, 0", // set user gp, tp to 0
@@ -146,7 +146,7 @@ pub unsafe fn enter_user(trap_frame: &TrapFrame, kstack_top: usize) -> ! {
         "LDR sp, sp, 1", // set sp to user_stack
 
         "sret",
-        tf = in(reg) trap_frame as *const TrapFrame,
+        tf = in(reg) kstack_top - core::mem::size_of::<TrapFrame>(),
         kstack = in(reg) kstack_top,
         options(noreturn)
     );

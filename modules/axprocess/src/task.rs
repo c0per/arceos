@@ -7,7 +7,7 @@ use crate::{
 use alloc::{string::String, sync::Arc, vec, vec::Vec};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
-    arch::{enter_user, TaskContext, TrapFrame},
+    arch::{enter_user, write_page_table_root, TaskContext, TrapFrame},
     mem::{PhysAddr, VirtAddr, PAGE_SIZE_4K},
     paging::MappingFlags,
 };
@@ -20,6 +20,7 @@ use core::{
     ptr::{copy_nonoverlapping, NonNull},
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
+use riscv::register::sstatus::Sstatus;
 use spinlock::SpinNoIrq;
 
 #[repr(u8)]
@@ -37,7 +38,6 @@ pub struct Task {
     state: AtomicU8,
     ctx: UnsafeCell<TaskContext>,
 
-    entry_point: u64,
     memory_set: Arc<MemorySet>,
 
     /// TaskStack is simply a pointer to memory in memory_set.
@@ -54,9 +54,10 @@ unsafe impl Send for Task {}
 unsafe impl Sync for Task {}
 
 impl Task {
-    pub fn from_elf_data(elf_data: &[u8]) -> Self {
-        use axhal::arch::write_page_table_root;
-
+    /// Create a Task from elf data, only used for init process. Other processes are spawned by
+    /// clone (fork) + execve.
+    /// This function will allocate kernel stack and put `TrapFrame` (including `argv`) into place.
+    pub fn from_elf_data(elf_data: &[u8], argv: &[&str]) -> Self {
         let mut memory_set = MemorySet::new_with_kernel_mapped();
 
         unsafe {
@@ -103,19 +104,35 @@ impl Task {
 
         let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed);
 
-        Self {
+        // handle trap frame
+        let trap_frame = gen_trap_frame(ustack.top(), elf.header.pt2.entry_point() as usize);
+
+        unsafe {
+            core::ptr::write(
+                (usize::from(kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame,
+                trap_frame.clone(),
+            );
+
+            riscv::register::sstatus::set_sum();
+        }
+
+        let mut task = Self {
             pid,
             tid: pid,
             state: AtomicU8::new(TaskState::Ready as u8),
             ctx: UnsafeCell::new(TaskContext::new()),
-            entry_point: elf.header.pt2.entry_point(),
+
             memory_set: Arc::new(memory_set),
             kstack,
             ustack,
 
             #[cfg(feature = "fs")]
             fd_table: SpinNoIrq::new(FdList::default()),
-        }
+        };
+
+        unsafe { task.push_argv(argv) };
+
+        task
     }
 
     pub fn set_state(&self, state: TaskState) {
@@ -142,93 +159,54 @@ impl Task {
         self.memory_set.page_table_root_ppn()
     }
 
-    pub fn dummy_trap_frame(&self) -> axhal::arch::TrapFrame {
-        use axhal::arch::TrapFrame;
-        use riscv::register::sstatus::{self, Sstatus};
-
-        let mut trap_frame = TrapFrame::default();
-
-        trap_frame.regs.sp = self.ustack.top().into();
-        trap_frame.sepc = self.entry_point as usize;
-
-        // restore kernel gp, tp
-        let tp: usize;
-        let gp: usize;
-        unsafe {
-            asm!(
-                "mv {}, tp",
-                "mv {}, gp",
-                out(reg) tp,
-                out(reg) gp,
-            );
-        }
-        trap_frame.regs.tp = tp;
-        trap_frame.regs.gp = gp;
-
-        // set SPP to User, SUM to 1
-        let sstatus_reg = sstatus::read();
-        unsafe {
-            trap_frame.sstatus =
-                *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) | (1 << 18);
-        }
-
-        trap_frame
-    }
-
     pub fn trap_frame_ptr(&self) -> *const axhal::arch::TrapFrame {
         (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *const TrapFrame
+    }
+
+    pub fn trap_frame_ptr_mut(&self) -> *mut axhal::arch::TrapFrame {
+        (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame
     }
 
     pub fn ctx_mut_ptr(&self) -> *mut TaskContext {
         self.ctx.get()
     }
 
+    /// Push in argv to stack in `TrapFrame` in kernel stack and update sp, a0, a1 in `TrapFrame`.
+    /// This function need to be when with SUM set.
+    pub unsafe fn push_argv(&self, argv: &[&str]) {
+        let trap_frame = &mut *self.trap_frame_ptr_mut();
+
+        let mut sp = trap_frame.regs.sp;
+        let argc = argv.len();
+
+        // argc
+        let argc_ptr = (sp - size_of::<usize>()) as *mut isize;
+        *argc_ptr = argc as isize;
+
+        sp -= (argc + 1) * size_of::<usize>();
+        let argv_ptr = sp as *mut *const u8;
+
+        argv.iter().enumerate().for_each(|(idx, arg)| {
+            sp -= argv.len() + 1;
+            *argv_ptr.offset(idx as isize) = sp as *const u8;
+            copy_nonoverlapping(arg.as_ptr(), sp as *mut u8, argv.len());
+            *((sp + argv.len()) as *mut u8) = b'\0';
+        });
+
+        trap_frame.regs.sp = sp;
+        trap_frame.regs.a0 = argc_ptr as usize;
+        trap_frame.regs.a1 = argv_ptr as usize;
+    }
+
     /// For Init (pid = 1) task only. Must be run after switching to user page table.
-    /// Create a dummy TrapFrame to go to _user_start
-    /// argc = 1, arvg = `name`
-    pub unsafe fn enter_as_init(&self, name: &str) -> ! {
+    pub unsafe fn enter_as_init(&self) -> ! {
         if self.pid != 1 || self.tid != 1 {
             panic!("Calling enter_user() for task other than (1, 1)");
         }
 
         self.set_state(TaskState::Running);
 
-        let mut trap_frame = self.dummy_trap_frame();
-
-        // edit ustack sp, push in name and argc
-        unsafe { riscv::register::sstatus::set_sum() };
-        let sp = trap_frame.regs.sp;
-        let name_byte_len = name.bytes().len();
-        let name_buf_len =
-            (name_byte_len + 1 + size_of::<usize>() - 1) / size_of::<usize>() * size_of::<usize>();
-        // argc
-        let argc_ptr = (sp - size_of::<usize>()) as *mut isize;
-        *argc_ptr = 1;
-        // argv
-        let argv_ptr = (sp - size_of::<usize>() * 2) as *mut *mut *mut u8;
-        *argv_ptr = (sp - size_of::<usize>() * 3) as *mut *mut u8;
-        // argv[0]
-        let argv0_ptr = (sp - size_of::<usize>() * 3) as *mut *mut u8;
-        *argv0_ptr = (sp - size_of::<usize>() * 3 - name_buf_len) as *mut u8;
-        // name
-        unsafe {
-            copy_nonoverlapping(name.as_ptr(), *argv0_ptr, name_byte_len);
-            *((*argv0_ptr).offset(name_byte_len as isize)) = b'\0';
-        }
-
-        trap_frame.regs.sp -= size_of::<usize>() * 3 + name_buf_len;
-        trap_frame.regs.a0 = argc_ptr as usize;
-        trap_frame.regs.a1 = argv_ptr as usize;
-
-        unsafe {
-            core::ptr::write(
-                (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>())
-                    as *mut TrapFrame,
-                trap_frame.clone(),
-            );
-        }
-
-        enter_user(&trap_frame, self.kstack.top().into());
+        enter_user(self.kstack.top().into());
     }
 
     pub fn set_in_wait_queue(&self, _: bool) {}
@@ -287,7 +265,6 @@ impl Task {
             state: AtomicU8::new(TaskState::Ready as u8),
             ctx: UnsafeCell::new(ctx),
 
-            entry_point: self.entry_point,
             memory_set: Arc::new(memory_set),
 
             kstack,
@@ -302,6 +279,36 @@ impl Task {
     pub fn fd_table(&self) -> &SpinNoIrq<FdList> {
         &self.fd_table
     }
+}
+
+fn gen_trap_frame(ustack_top: VirtAddr, entry_point: usize) -> TrapFrame {
+    let mut trap_frame = TrapFrame::default();
+
+    trap_frame.regs.sp = ustack_top.into();
+    trap_frame.sepc = entry_point;
+
+    // restore kernel gp, tp
+    let tp: usize;
+    let gp: usize;
+    unsafe {
+        asm!(
+            "mv {}, tp",
+            "mv {}, gp",
+            out(reg) tp,
+            out(reg) gp,
+        );
+    }
+    trap_frame.regs.tp = tp;
+    trap_frame.regs.gp = gp;
+
+    // set SPP to User, SUM to 1
+    let sstatus_reg = riscv::register::sstatus::read();
+    unsafe {
+        trap_frame.sstatus =
+            *(&sstatus_reg as *const Sstatus as *const usize) & !(1 << 8) | (1 << 18);
+    }
+
+    trap_frame
 }
 
 static TASK_ID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
