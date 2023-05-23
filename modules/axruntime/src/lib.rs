@@ -272,7 +272,8 @@ fn load_app() -> axprocess::Task {
     let app_data_len = app_end as usize - app_start as usize;
     let elf_data = unsafe { core::slice::from_raw_parts(app_start as *const u8, app_data_len) };
 
-    axprocess::Task::from_elf_data(elf_data)
+    let loader = axprocess::Loader::new(&elf_data);
+    loader.load(&[name])
 }
 
 #[cfg(all(feature = "syscall", feature = "fs"))]
@@ -282,5 +283,6 @@ fn load_app(name: &str) -> axprocess::Task {
 
     info!("app elf data length: {}", elf_data.len());
 
-    axprocess::Task::from_elf_data(&elf_data, &[name])
+    let loader = axprocess::Loader::new(&elf_data);
+    loader.load(&[name])
 }

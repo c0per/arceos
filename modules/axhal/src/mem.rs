@@ -1,3 +1,4 @@
+use crate::{arch::read_page_table_root, paging::PageTable};
 pub use memory_addr::{PhysAddr, VirtAddr, PAGE_SIZE_4K};
 
 bitflags::bitflags! {
@@ -40,8 +41,10 @@ impl Iterator for MemRegionIter {
 }
 
 #[inline]
-pub const fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-    PhysAddr::from(vaddr.as_usize() - axconfig::PHYS_VIRT_OFFSET)
+pub fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
+    let page_table_root = read_page_table_root();
+
+    PageTable::lookup(page_table_root, vaddr).unwrap().0
 }
 
 #[inline]

@@ -6,6 +6,7 @@ extern crate alloc;
 extern crate log;
 
 mod fs;
+mod loader;
 pub mod scheduler;
 mod stack;
 mod syscall;
@@ -18,6 +19,7 @@ mod stdio;
 #[cfg(feature = "fs")]
 mod fd;
 
+pub use loader::Loader;
 pub use task::{Task, TaskState};
 
 struct KernelGuardIfImpl;

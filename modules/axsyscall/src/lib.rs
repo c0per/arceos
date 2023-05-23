@@ -40,6 +40,6 @@ pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
             Clone => task::clone(),
         }
     } else {
-        unimplemented!()
+        unimplemented!("syscall id: {}", syscall_id)
     }
 }

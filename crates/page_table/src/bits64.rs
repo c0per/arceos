@@ -80,6 +80,18 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok((entry.paddr() + off, entry.flags(), size))
     }
 
+    pub fn lookup(
+        paddr: PhysAddr,
+        vaddr: VirtAddr,
+    ) -> PagingResult<(PhysAddr, MappingFlags, PageSize)> {
+        let (entry, size) = Self::lookup_entry_mut(paddr, vaddr)?;
+        if entry.is_unused() {
+            return Err(PagingError::NotMapped);
+        }
+        let off = vaddr.align_offset(size);
+        Ok((entry.paddr() + off, entry.flags(), size))
+    }
+
     pub fn map_region(
         &mut self,
         vaddr: VirtAddr,
@@ -194,6 +206,15 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         unsafe { core::slice::from_raw_parts_mut(ptr, ENTRY_COUNT) }
     }
 
+    /// Get PTE slice for page table in `paddr`
+    ///
+    /// SAFETY: paddr must be a valid page table and the slice returned should live shorter than
+    /// the page table.
+    unsafe fn lookup_table_of_mut<'a>(paddr: PhysAddr) -> &'a mut [PTE] {
+        let ptr = IF::phys_to_virt(paddr).as_mut_ptr() as _;
+        core::slice::from_raw_parts_mut(ptr, ENTRY_COUNT)
+    }
+
     fn next_table_mut<'a>(&self, entry: &PTE) -> PagingResult<&'a mut [PTE]> {
         if !entry.is_present() {
             Err(PagingError::NotMapped)
@@ -201,6 +222,16 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
             Err(PagingError::MappedToHugePage)
         } else {
             Ok(self.table_of_mut(entry.paddr()))
+        }
+    }
+
+    fn lookup_next_table_mut<'a>(entry: &PTE) -> PagingResult<&'a mut [PTE]> {
+        if !entry.is_present() {
+            Err(PagingError::NotMapped)
+        } else if entry.is_huge() {
+            Err(PagingError::MappedToHugePage)
+        } else {
+            unsafe { Ok(Self::lookup_table_of_mut(entry.paddr())) }
         }
     }
 
@@ -213,6 +244,40 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         } else {
             self.next_table_mut(entry)
         }
+    }
+
+    /// Loop up the page table in `paddr` manually to query for PTE.
+    ///
+    /// SAFETY: `paddr` must be a valid page table and &PTE returned should live shorter than the
+    /// page table itself.
+    fn lookup_entry_mut<'a>(
+        paddr: PhysAddr,
+        vaddr: VirtAddr,
+    ) -> PagingResult<(&'a mut PTE, PageSize)> {
+        let p3 = if M::LEVELS == 3 {
+            unsafe { Self::lookup_table_of_mut(paddr) }
+        } else if M::LEVELS == 4 {
+            let p4 = unsafe { Self::lookup_table_of_mut(paddr) };
+            let p4e = &mut p4[p4_index(vaddr)];
+            Self::lookup_next_table_mut(p4e)?
+        } else {
+            unreachable!()
+        };
+
+        let p3e = &mut p3[p3_index(vaddr)];
+        if p3e.is_huge() {
+            return Ok((p3e, PageSize::Size1G));
+        }
+
+        let p2 = Self::lookup_next_table_mut(p3e)?;
+        let p2e = &mut p2[p2_index(vaddr)];
+        if p2e.is_huge() {
+            return Ok((p2e, PageSize::Size2M));
+        }
+
+        let p1 = Self::lookup_next_table_mut(p2e)?;
+        let p1e = &mut p1[p1_index(vaddr)];
+        Ok((p1e, PageSize::Size4K))
     }
 
     fn get_entry_mut(&self, vaddr: VirtAddr) -> PagingResult<(&mut PTE, PageSize)> {
