@@ -7,6 +7,7 @@ extern crate log;
 
 mod fs;
 mod loader;
+mod mem;
 pub mod scheduler;
 mod stack;
 mod syscall;

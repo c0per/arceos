@@ -9,7 +9,7 @@ use memory_addr::PhysAddr;
 pub use arch::*;
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Default)]
     pub struct MappingFlags: usize {
         const READ          = 1 << 0;
         const WRITE         = 1 << 1;

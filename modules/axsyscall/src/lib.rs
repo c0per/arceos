@@ -4,6 +4,7 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 pub mod fs;
+pub mod mem;
 pub mod task;
 pub mod time;
 
@@ -18,10 +19,11 @@ pub enum SyscallId {
     SchedYield = 124,
     GetTimeOfDay = 169,
     Clone = 220,
+    MMap = 222,
 }
 
 /// syscall dispatcher
-pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
+pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     if let Some(id) = SyscallId::from_usize(syscall_id) {
         use SyscallId::*;
         match id {
@@ -38,6 +40,14 @@ pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
             SchedYield => task::sched_yield(),
             GetTimeOfDay => time::get_time_of_day(args[0] as *mut time::TimeVal, args[1]),
             Clone => task::clone(),
+            MMap => mem::mmap(
+                args[0],
+                args[1],
+                args[2] as u32,
+                args[3] as u32,
+                args[4],
+                args[5],
+            ),
         }
     } else {
         unimplemented!("syscall id: {}", syscall_id)

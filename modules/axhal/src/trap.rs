@@ -5,7 +5,7 @@ pub trait TrapHandler {
     fn handle_irq(irq_num: usize);
 
     #[cfg(feature = "syscall")]
-    fn handle_user_ecall(syscall_id: usize, args: [usize; 4]) -> isize;
+    fn handle_user_ecall(syscall_id: usize, args: [usize; 6]) -> isize;
 
     // more e.g.: handle_page_fault();
 }
@@ -18,6 +18,6 @@ pub(crate) fn handle_irq_extern(irq_num: usize) {
 
 /// Call the external syscall handler.
 #[cfg(feature = "syscall")]
-pub(crate) fn handle_user_ecall(syscall_id: usize, args: [usize; 4]) -> isize {
+pub(crate) fn handle_user_ecall(syscall_id: usize, args: [usize; 6]) -> isize {
     call_interface!(TrapHandler::handle_user_ecall, syscall_id, args)
 }

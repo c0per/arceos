@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(drain_filter)]
 
 extern crate alloc;
 use alloc::{collections::BTreeMap, vec::Vec};
@@ -39,6 +40,23 @@ pub struct MapArea {
     pub pages: GlobalPage,
     pub vaddr: VirtAddr,
     pub flags: MappingFlags,
+}
+
+impl MapArea {
+    /// If [start, end) overlaps with self.
+    pub fn overlap_with(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        let area_end = self.vaddr + self.pages.size();
+
+        self.vaddr <= start && start < area_end || start <= self.vaddr && self.vaddr < end
+    }
+
+    pub fn contained_in(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        start <= self.vaddr && self.vaddr + self.pages.size() <= end
+    }
+
+    pub fn contains(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        self.vaddr <= start && end <= self.vaddr + self.pages.size()
+    }
 }
 
 impl MemorySet {
@@ -325,5 +343,59 @@ impl MemorySet {
         );
 
         new
+    }
+
+    /// Make [start, end) unmapped and dealloced. You need to have a fence after this.
+    ///
+    /// NOTE: modified map area will have a different PhysAddr.
+    /// TODO: maybe edit map area size in place.
+    pub fn split_for_area(&mut self, start: VirtAddr, size: usize) {
+        let end = start + size;
+        let overlapped_area = self
+            .owned_mem
+            .drain_filter(|area| area.overlap_with(start, end))
+            .collect::<Vec<_>>();
+
+        for area in overlapped_area {
+            // remove records in page table
+            self.page_table.unmap_region(area.vaddr, area.pages.size());
+
+            let area_start = usize::from(area.vaddr);
+            let area_end = area_start + area.pages.size();
+            let area_data = area.pages.as_slice();
+
+            let start = usize::from(start);
+            let end = usize::from(end);
+
+            // create a new area for [area_start, start)
+            if area_start < start {
+                self.alloc_region(
+                    area_start.into(),
+                    start - area_start,
+                    area.flags,
+                    Some(&area_data[..start - area_start]),
+                );
+            }
+
+            // create a new area for [end, area_end)
+            if end < area_end {
+                self.alloc_region(
+                    end.into(),
+                    area_end - end,
+                    area.flags,
+                    Some(&area_data[end - area_start..]),
+                );
+            }
+        }
+    }
+
+    pub fn mmap(&mut self, start: VirtAddr, size: usize, flags: MappingFlags, fixed: bool) {
+        if fixed {
+            self.split_for_area(start, size);
+            self.alloc_region(start, size, flags, None);
+            unsafe { riscv::asm::sfence_vma_all() };
+        } else {
+            unimplemented!()
+        }
     }
 }

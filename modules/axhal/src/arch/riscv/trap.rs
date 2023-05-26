@@ -28,7 +28,9 @@ fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
 
             tf.regs.a0 = crate::trap::handle_user_ecall(
                 tf.regs.a7,
-                [tf.regs.a0, tf.regs.a1, tf.regs.a2, tf.regs.a3],
+                [
+                    tf.regs.a0, tf.regs.a1, tf.regs.a2, tf.regs.a3, tf.regs.a4, tf.regs.a5,
+                ],
             ) as usize;
 
             trace!("Syscall handled. Returning to U mode.");
