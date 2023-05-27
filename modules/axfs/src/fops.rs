@@ -11,6 +11,7 @@ pub type DirEntry = axfs_vfs::VfsDirEntry;
 pub type FileAttr = axfs_vfs::VfsNodeAttr;
 pub type FilePerm = axfs_vfs::VfsNodePerm;
 
+#[derive(Clone)]
 pub struct File {
     node: WithCap<VfsNodeRef>,
     is_append: bool,

@@ -1,9 +1,8 @@
 use super::scheduler::CurrentTask;
 use crate::utils::raw_ptr_to_ref_str;
-use axsyscall::fs::SyscallFs;
+use axsyscall::fs::{Kstat, SyscallFs};
 use bitflags::bitflags;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
-use crate_interface::impl_interface;
 
 struct SyscallFsImpl;
 
@@ -19,6 +18,7 @@ impl SyscallFs for SyscallFsImpl {
 
         bitflags! {
             /// File open flags from linux fcntl.h
+            #[derive(Debug)]
             pub struct OpenFlags: u32 {
                 // access mode
                 const O_RDONLY = 0;
@@ -26,7 +26,7 @@ impl SyscallFs for SyscallFsImpl {
                 const O_RDWR = 1 << 1;
 
                 // creation flags
-                // const O_CREAT = 1 << 6;
+                const O_CREAT = 1 << 6;
                 // const O_EXCL = 1 << 7;
                 // const O_NOCTTY = 1 << 8;
                 // const O_TRUNC = 1 << 9;
@@ -39,16 +39,19 @@ impl SyscallFs for SyscallFsImpl {
             }
         }
 
+        info!("open flags: {:b}", flags);
         let flags = OpenFlags::from_bits(flags).expect("Unsupported file open flags");
         let mut open_opt = OpenOptions::new();
 
-        if flags.contains(OpenFlags::O_RDONLY) {
-            open_opt.read(true);
-        } else if flags.contains(OpenFlags::O_WRONLY) {
+        if flags.contains(OpenFlags::O_WRONLY) {
             open_opt.write(true);
-        } else {
+        } else if flags.contains(OpenFlags::O_RDWR) {
             open_opt.read(true).write(true);
+        } else {
+            open_opt.read(true);
         }
+
+        info!("open open_opt: {:?}, flags: {:?}", open_opt, flags);
 
         // TODO: open_at
         if let Ok(file) = open_opt.open(pathname) {
@@ -65,9 +68,9 @@ impl SyscallFs for SyscallFsImpl {
         let current = CurrentTask::try_get().expect("No current task");
         let mut fd_table = current.fd_table().lock();
 
-        if let Some(file) = fd_table.query_fd_mut(fd) {
-            file.take();
-
+        if fd < fd_table.len() {
+            // This function will panic if fd is out of bound.
+            fd_table.remove(fd);
             0
         } else {
             // closing a fd doesn't exist or alread closed
@@ -83,7 +86,7 @@ impl SyscallFs for SyscallFsImpl {
         let buf = unsafe { from_raw_parts_mut(buf as *mut u8, count) };
 
         if let Some(file) = fd_table.query_fd(fd) {
-            file.borrow_mut().read(buf).map_or(-1, |res| res as isize)
+            file.lock().read(buf).map_or(-1, |res| res as isize)
         } else {
             -1
         }
@@ -96,7 +99,49 @@ impl SyscallFs for SyscallFsImpl {
         let buf = unsafe { from_raw_parts(buf, count) };
 
         if let Some(file) = fd_table.query_fd(fd) {
-            file.borrow_mut().write(buf).map_or(-1, |res| res as isize)
+            file.lock().write(buf).map_or(-1, |res| res as isize)
+        } else {
+            -1
+        }
+    }
+
+    // TODO
+    fn fstat(fd: usize, kst: *mut axsyscall::fs::Kstat) -> isize {
+        warn!("TODO: fstat");
+        let current = CurrentTask::try_get().expect("No current task");
+        let fd_table = current.fd_table().lock();
+
+        if let Some(_) = fd_table.query_fd(fd) {
+            let stat = Kstat {
+                st_dev: 1,
+                st_ino: 1,
+                // st_mode: normal_file_mode(StMode::S_IFREG).bits(),
+                // st_nlink: get_link_count(&FilePath::new(self.path.as_str())) as u32,
+                st_mode: 0,
+                st_nlink: 1,
+                st_uid: 0,
+                st_gid: 0,
+                st_rdev: 0,
+                _pad0: 0,
+                // st_size: raw_metadata.size() as u64,
+                st_size: 0,
+                st_blksize: 0,
+                _pad1: 0,
+                // st_blocks: raw_metadata.blocks() as u64,
+                st_blocks: 0,
+                // st_atime_sec: stat.atime as isize,
+                st_atime_sec: 0,
+                st_atime_nsec: 0,
+                // st_mtime_sec: stat.mtime as isize,
+                st_mtime_sec: 0,
+                st_mtime_nsec: 0,
+                // st_ctime_sec: stat.ctime as isize,
+                st_ctime_sec: 0,
+                st_ctime_nsec: 0,
+            };
+
+            unsafe { *kst = stat };
+            0
         } else {
             -1
         }

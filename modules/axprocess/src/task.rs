@@ -1,26 +1,17 @@
-use crate::{
-    fd::FdList,
-    scheduler::CurrentTask,
-    stack::TaskStack,
-    stdio::{Stderr, Stdin, Stdout},
-};
-use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use crate::{fd::FdList, stack::TaskStack};
+use alloc::{string::String, sync::Arc};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
-    arch::{enter_user, write_page_table_root, TaskContext, TrapFrame},
-    mem::{PhysAddr, VirtAddr, PAGE_SIZE_4K},
-    paging::MappingFlags,
+    arch::{enter_user, TaskContext, TrapFrame},
+    mem::PhysAddr,
 };
 use axmem::MemorySet;
 use core::{
-    alloc::Layout,
-    arch::asm,
-    cell::{RefCell, UnsafeCell},
+    cell::UnsafeCell,
     mem::{align_of, size_of},
-    ptr::{copy_nonoverlapping, NonNull},
+    ptr::copy_nonoverlapping,
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
-use riscv::register::sstatus::Sstatus;
 use spinlock::SpinNoIrq;
 
 #[repr(u8)]
@@ -38,7 +29,7 @@ pub struct Task {
     pub(crate) state: AtomicU8,
     pub(crate) ctx: UnsafeCell<TaskContext>,
 
-    pub(crate) memory_set: Arc<MemorySet>,
+    pub(crate) memory_set: Arc<SpinNoIrq<MemorySet>>,
 
     /// TaskStack is simply a pointer to memory in memory_set.
     /// Kernel stack is mapped in "free memory" region.
@@ -75,15 +66,15 @@ impl Task {
     }
 
     pub fn page_table_ppn(&self) -> PhysAddr {
-        self.memory_set.page_table_root_ppn()
+        self.memory_set.lock().page_table_root_ppn()
     }
 
     pub fn trap_frame_ptr(&self) -> *const axhal::arch::TrapFrame {
-        (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *const TrapFrame
+        (usize::from(self.kstack.top()) - size_of::<TrapFrame>()) as *const TrapFrame
     }
 
     pub fn trap_frame_ptr_mut(&self) -> *mut axhal::arch::TrapFrame {
-        (usize::from(self.kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame
+        (usize::from(self.kstack.top()) - size_of::<TrapFrame>()) as *mut TrapFrame
     }
 
     pub fn ctx_mut_ptr(&self) -> *mut TaskContext {
@@ -165,7 +156,8 @@ impl Task {
 
         let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Release);
 
-        let mut memory_set = self.memory_set.clone_mapped();
+        let mut memory_set = todo!("impl Clone for MemorySet");
+        // let mut memory_set = self.memory_set.lock().clone();
 
         // Create new U stack
         // let max_va = memory_set.max_va();
@@ -184,11 +176,10 @@ impl Task {
         // );
 
         // Create new S stack
-        let kstack = TaskStack::alloc(axconfig::TASK_STACK_SIZE);
-        let trap_frame =
-            (usize::from(kstack.top()) - core::mem::size_of::<TrapFrame>()) as *mut TrapFrame;
+        let kstack = TaskStack::alloc(TASK_STACK_SIZE);
+        let trap_frame = (usize::from(kstack.top()) - size_of::<TrapFrame>()) as *mut TrapFrame;
         unsafe {
-            core::ptr::copy_nonoverlapping(self.trap_frame_ptr(), trap_frame, 1);
+            copy_nonoverlapping(self.trap_frame_ptr(), trap_frame, 1);
         }
 
         let trap_frame = unsafe { &mut *trap_frame };
@@ -196,10 +187,7 @@ impl Task {
         // trap_frame.regs.sp = ustack.top().into();
 
         let mut ctx = TaskContext::new();
-        ctx.init(
-            task_entry as usize,
-            kstack.top() - core::mem::size_of::<TrapFrame>(),
-        );
+        ctx.init(task_entry as usize, kstack.top() - size_of::<TrapFrame>());
 
         Self {
             pid,
@@ -207,7 +195,7 @@ impl Task {
             state: AtomicU8::new(TaskState::Ready as u8),
             ctx: UnsafeCell::new(ctx),
 
-            memory_set: Arc::new(memory_set),
+            memory_set: Arc::new(SpinNoIrq::new(memory_set)),
 
             kstack,
             ustack: self.ustack.clone(),

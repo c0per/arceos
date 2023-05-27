@@ -15,7 +15,7 @@ use spinlock::SpinNoIrq;
 const PAGE_SIZE: usize = 0x1000;
 const MIN_HEAP_SIZE: usize = 0x8000; // 32 K
 
-pub use page::GlobalPage;
+pub use page::{GlobalPage, PhysPage};
 
 pub struct GlobalAllocator {
     balloc: SpinNoIrq<SlabByteAllocator>,

@@ -21,6 +21,7 @@ mod stdio;
 mod fd;
 
 pub use loader::Loader;
+pub use mem::handle_page_fault;
 pub use task::{Task, TaskState};
 
 struct KernelGuardIfImpl;

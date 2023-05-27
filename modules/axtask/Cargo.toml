@@ -30,7 +30,6 @@ log = "0.4"
 axhal = { path = "../axhal" }
 axconfig = { path = "../axconfig", optional = true }
 axsyscall = { path = "../axsyscall", optional = true }
-axmem = { path = "../axmem", optional = true }
 percpu = { path = "../../crates/percpu", optional = true }
 spinlock = { path = "../../crates/spinlock", optional = true }
 lazy_init = { path = "../../crates/lazy_init", optional = true }

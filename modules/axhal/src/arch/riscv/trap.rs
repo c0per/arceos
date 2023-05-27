@@ -1,4 +1,10 @@
-use riscv::register::scause::{self, Exception as E, Trap};
+use page_table::MappingFlags;
+use riscv::register::{
+    scause::{self, Exception as E, Trap},
+    stval,
+};
+
+use crate::trap::handle_page_fault;
 
 use super::TrapFrame;
 
@@ -34,6 +40,20 @@ fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
             ) as usize;
 
             trace!("Syscall handled. Returning to U mode.");
+        }
+
+        Trap::Exception(E::LoadPageFault) => {
+            trace!("Handling load page fault.");
+            let addr = stval::read();
+
+            handle_page_fault(addr.into(), MappingFlags::USER | MappingFlags::READ);
+        }
+
+        Trap::Exception(E::StorePageFault) => {
+            trace!("Handling store page fault.");
+            let addr = stval::read();
+
+            handle_page_fault(addr.into(), MappingFlags::USER | MappingFlags::WRITE);
         }
 
         Trap::Interrupt(_) => crate::trap::handle_irq_extern(scause.bits()),

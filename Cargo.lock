@@ -286,9 +286,12 @@ name = "axmem"
 version = "0.1.0"
 dependencies = [
  "axalloc",
+ "axfs",
  "axhal",
+ "axio",
  "log",
  "riscv",
+ "spinlock",
  "xmas-elf",
 ]
 
@@ -380,7 +383,6 @@ version = "0.1.0"
 dependencies = [
  "axconfig",
  "axhal",
- "axmem",
  "axsyscall",
  "axtask",
  "cfg-if",

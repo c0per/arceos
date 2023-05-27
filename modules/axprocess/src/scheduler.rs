@@ -34,7 +34,7 @@ impl Scheduler {
     }
 
     pub fn exit_current(&mut self) -> ! {
-        let mut curr = CurrentTask::try_get().expect("Current task not found");
+        let curr = CurrentTask::try_get().expect("Current task not found");
 
         if curr.0.is_init() {
             axhal::misc::terminate();
@@ -51,7 +51,7 @@ impl Scheduler {
     }
 
     pub fn clone_current(&mut self) -> usize {
-        let mut curr = CurrentTask::try_get().expect("Current task not found");
+        let curr = CurrentTask::try_get().expect("Current task not found");
 
         let new_task = curr.clone();
         let new_tid = new_task.tid;

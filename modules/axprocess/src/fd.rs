@@ -1,29 +1,17 @@
 use crate::stdio::{Stderr, Stdin, Stdout};
 use alloc::{sync::Arc, vec, vec::Vec};
 use axfs::api::{File, FileExt};
-use core::{
-    cell::RefCell,
-    ops::{Deref, DerefMut},
-};
+use core::ops::{Deref, DerefMut};
+use spinlock::SpinNoIrq;
 
-pub struct FdList(Vec<Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>>);
+pub struct FdList(Vec<Option<Arc<SpinNoIrq<dyn FileExt + Send + Sync>>>>);
 
 impl FdList {
-    pub fn query_fd(
-        &self,
-        fd: usize,
-    ) -> Option<&Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>> {
+    pub fn query_fd(&self, fd: usize) -> Option<&Arc<SpinNoIrq<dyn FileExt + Send + Sync>>> {
         match self.get(fd) {
             Some(file) => file.as_ref(),
             None => None,
         }
-    }
-
-    pub fn query_fd_mut(
-        &mut self,
-        fd: usize,
-    ) -> Option<&mut Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>> {
-        self.get_mut(fd)
     }
 
     pub fn alloc_fd(&mut self, file: File) -> isize {
@@ -34,11 +22,11 @@ impl FdList {
             .find(|(_fd, slot)| slot.is_none())
         {
             Some((fd, slot)) => {
-                slot.insert(Arc::new(RefCell::new(file)));
+                let _ = slot.insert(Arc::new(SpinNoIrq::new(file)));
                 fd
             }
             None => {
-                self.0.push(Some(Arc::new(RefCell::new(file))));
+                self.0.push(Some(Arc::new(SpinNoIrq::new(file))));
                 self.0.len() - 1
             }
         };
@@ -48,7 +36,7 @@ impl FdList {
 }
 
 impl Deref for FdList {
-    type Target = Vec<Option<Arc<RefCell<dyn axfs::api::FileExt + Send + Sync>>>>;
+    type Target = Vec<Option<Arc<SpinNoIrq<dyn FileExt + Send + Sync>>>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -63,9 +51,9 @@ impl DerefMut for FdList {
 impl Default for FdList {
     fn default() -> Self {
         Self(vec![
-            Some(Arc::new(RefCell::new(Stdin))),
-            Some(Arc::new(RefCell::new(Stdout))),
-            Some(Arc::new(RefCell::new(Stderr))),
+            Some(Arc::new(SpinNoIrq::new(Stdin))),
+            Some(Arc::new(SpinNoIrq::new(Stdout))),
+            Some(Arc::new(SpinNoIrq::new(Stderr))),
         ])
     }
 }

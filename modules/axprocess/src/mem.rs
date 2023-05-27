@@ -1,13 +1,13 @@
+use axhal::mem::VirtAddr;
 use axhal::paging::MappingFlags;
+use axmem::MemBackend;
 use axsyscall::mem::SyscallMem;
-use bitflags::bitflags;
-use bitflags::BitFlags;
 
 use crate::scheduler::CurrentTask;
 
 struct SyscallMemImpl;
 
-bitflags! {
+bitflags::bitflags! {
     pub struct MMapProtFlag: u32 {
         const PROT_READ = 1 << 0;
         const PROT_WRITE = 1 << 1;
@@ -15,8 +15,9 @@ bitflags! {
     }
 }
 
-bitflags! {
+bitflags::bitflags! {
     pub struct MMapFlags: u32 {
+        const MAP_FILE = 0; // ignored
         const MAP_SHARED = 1 << 0;
         const MAP_PRIVATE = 1 << 1;
 
@@ -28,7 +29,7 @@ bitflags! {
 
 impl From<MMapProtFlag> for MappingFlags {
     fn from(value: MMapProtFlag) -> Self {
-        let mut flags = Self::default();
+        let mut flags = MappingFlags::USER;
 
         if value.contains(MMapProtFlag::PROT_READ) {
             flags |= MappingFlags::READ;
@@ -59,14 +60,48 @@ impl SyscallMem for SyscallMemImpl {
             return -1;
         }
 
-        // no file
-        if flags.contains(MMapFlags::MAP_ANONYMOUS) {
-            let current = CurrentTask::try_get().expect("No current task");
-            current.memory_set.mmap(start, len, prot, fixed);
+        let current = CurrentTask::try_get().expect("No current task");
+        let addr = if flags.contains(MMapFlags::MAP_ANONYMOUS) {
+            // no file
+            current
+                .memory_set
+                .lock()
+                .mmap(start.into(), len, prot, fixed, None)
         } else {
-            unimplemented!()
-        }
+            // file backend
+            let file = match current.fd_table.lock().query_fd(fd) {
+                Some(file) => file.clone(),
+                // fd not found
+                None => return -1,
+            };
+
+            let backend = MemBackend::new(file, offset as u64);
+
+            current
+                .memory_set
+                .lock()
+                .mmap(start.into(), len, prot, fixed, Some(backend))
+        };
+
+        unsafe { riscv::asm::sfence_vma_all() };
+
+        addr
+    }
+
+    fn munmap(start: usize, len: usize) -> isize {
+        let current = CurrentTask::try_get().expect("No current task");
+        current.memory_set.lock().munmap(start.into(), len);
+
+        unsafe { riscv::asm::sfence_vma_all() };
 
         0
     }
+}
+
+pub fn handle_page_fault(addr: VirtAddr, flags: MappingFlags) {
+    let current = CurrentTask::try_get().expect("No current task");
+
+    current.memory_set.lock().handle_page_fault(addr, flags);
+
+    unsafe { riscv::asm::sfence_vma_all() };
 }

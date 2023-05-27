@@ -3,7 +3,7 @@ use alloc::{sync::Arc, vec::Vec};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
     arch::{write_page_table_root, TaskContext, TrapFrame},
-    mem::{VirtAddr, PAGE_SIZE_4K},
+    mem::VirtAddr,
     paging::MappingFlags,
 };
 use axmem::MemorySet;
@@ -82,10 +82,11 @@ impl<'a> Loader<'a> {
 
         // Allocate memory for user stack and hold it in memory_set
         let ustack_bottom = VirtAddr::from(0x3fe5_0000);
-        memory_set.alloc_region(
+        memory_set.new_region(
             ustack_bottom,
             TASK_STACK_SIZE,
             MappingFlags::USER | MappingFlags::READ | MappingFlags::WRITE,
+            Some(&[0]),
             None,
         );
         let ustack = TaskStack::new(
@@ -112,7 +113,7 @@ impl<'a> Loader<'a> {
             state: AtomicU8::new(TaskState::Ready as u8),
             ctx: UnsafeCell::new(TaskContext::new()),
 
-            memory_set: Arc::new(memory_set),
+            memory_set: Arc::new(SpinNoIrq::new(memory_set)),
             kstack,
             ustack,
 

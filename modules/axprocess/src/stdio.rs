@@ -5,13 +5,13 @@ use axio::{Read, Seek, Write};
 pub(crate) struct Stdin;
 
 impl Read for Stdin {
-    fn read(&mut self, buf: &mut [u8]) -> axio::Result<usize> {
+    fn read(&mut self, _buf: &mut [u8]) -> axio::Result<usize> {
         todo!()
     }
 }
 
 impl Write for Stdin {
-    fn write(&mut self, buf: &[u8]) -> axio::Result<usize> {
+    fn write(&mut self, _buf: &[u8]) -> axio::Result<usize> {
         panic!("Writing to stdin")
     }
 
@@ -21,7 +21,7 @@ impl Write for Stdin {
 }
 
 impl Seek for Stdin {
-    fn seek(&mut self, pos: axio::SeekFrom) -> axio::Result<u64> {
+    fn seek(&mut self, _pos: axio::SeekFrom) -> axio::Result<u64> {
         todo!()
     }
 }
@@ -31,7 +31,7 @@ impl FileExt for Stdin {}
 pub(crate) struct Stdout;
 
 impl Read for Stdout {
-    fn read(&mut self, buf: &mut [u8]) -> axio::Result<usize> {
+    fn read(&mut self, _buf: &mut [u8]) -> axio::Result<usize> {
         panic!("Reading from stdout")
     }
 }
@@ -50,7 +50,7 @@ impl Write for Stdout {
 }
 
 impl Seek for Stdout {
-    fn seek(&mut self, pos: axio::SeekFrom) -> axio::Result<u64> {
+    fn seek(&mut self, _pos: axio::SeekFrom) -> axio::Result<u64> {
         todo!()
     }
 }
@@ -60,7 +60,7 @@ impl FileExt for Stdout {}
 pub(crate) struct Stderr;
 
 impl Read for Stderr {
-    fn read(&mut self, buf: &mut [u8]) -> axio::Result<usize> {
+    fn read(&mut self, _buf: &mut [u8]) -> axio::Result<usize> {
         panic!("Reading from stderr")
     }
 }
@@ -79,7 +79,7 @@ impl Write for Stderr {
 }
 
 impl Seek for Stderr {
-    fn seek(&mut self, pos: axio::SeekFrom) -> axio::Result<u64> {
+    fn seek(&mut self, _pos: axio::SeekFrom) -> axio::Result<u64> {
         todo!()
     }
 }

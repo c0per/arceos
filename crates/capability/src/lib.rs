@@ -15,6 +15,7 @@ bitflags::bitflags! {
 pub struct CapError;
 
 /// A wrapper that holds a value with a capability.
+#[derive(Clone)]
 pub struct WithCap<T> {
     inner: T,
     cap: Cap,

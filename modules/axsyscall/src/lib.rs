@@ -15,9 +15,11 @@ pub enum SyscallId {
     Close = 57,
     Read = 63,
     Write = 64,
+    Fstat = 80,
     Exit = 93,
     SchedYield = 124,
     GetTimeOfDay = 169,
+    MUnmap = 215,
     Clone = 220,
     MMap = 222,
 }
@@ -36,9 +38,11 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             Close => fs::close(args[0]),
             Read => fs::read(args[0], args[1] as *const u8, args[2]),
             Write => fs::write(args[0], args[1] as *const u8, args[2]),
+            Fstat => fs::fstat(args[0], args[1] as *mut fs::Kstat),
             Exit => task::exit(args[0] as i32),
             SchedYield => task::sched_yield(),
             GetTimeOfDay => time::get_time_of_day(args[0] as *mut time::TimeVal, args[1]),
+            MUnmap => mem::munmap(args[0], args[1]),
             Clone => task::clone(),
             MMap => mem::mmap(
                 args[0],

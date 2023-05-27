@@ -12,6 +12,7 @@ pub type FileType = fops::FileType;
 pub type Permissions = fops::FilePerm;
 
 /// An object providing access to an open file on the filesystem.
+#[derive(Clone)]
 pub struct File {
     inner: fops::File,
 }
@@ -186,7 +187,52 @@ impl Seek for File {
 }
 
 #[cfg(feature = "file-ext")]
-pub trait FileExt: Read + Write + Seek {}
+pub trait FileExt: Read + Write + Seek {
+    fn clone_file(&self) -> File {
+        panic!("clone file not implemented for FileExt");
+    }
+
+    /// Read from position without changing cursor.
+    fn read_from_seek(&mut self, pos: SeekFrom, buf: &mut [u8]) -> Result<usize> {
+        // get old position
+        let old_pos = self
+            .seek(SeekFrom::Current(0))
+            .expect("Error get current pos in file");
+
+        // seek to read position
+        let _ = self.seek(pos).unwrap();
+
+        // read
+        let read_len = self.read(buf);
+
+        // seek back to old_pos
+        let _ = self.seek(SeekFrom::Start(old_pos)).unwrap();
+
+        read_len
+    }
+
+    /// Write to position without changing cursor.
+    fn write_to_seek(&mut self, pos: SeekFrom, buf: &[u8]) -> Result<usize> {
+        // get old position
+        let old_pos = self
+            .seek(SeekFrom::Current(0))
+            .expect("Error get current pos in file");
+
+        // seek to write position
+        let _ = self.seek(pos).unwrap();
+
+        let write_len = self.write(buf);
+
+        // seek back to old_pos
+        let _ = self.seek(SeekFrom::Start(old_pos)).unwrap();
+
+        write_len
+    }
+}
 
 #[cfg(feature = "file-ext")]
-impl FileExt for File {}
+impl FileExt for File {
+    fn clone_file(&self) -> File {
+        self.clone()
+    }
+}

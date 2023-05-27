@@ -9,7 +9,7 @@ use memory_addr::PhysAddr;
 pub use arch::*;
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone, Copy)]
     pub struct MappingFlags: usize {
         const READ          = 1 << 0;
         const WRITE         = 1 << 1;
@@ -22,6 +22,10 @@ bitflags::bitflags! {
 pub trait GenericPTE: Debug + Clone + Copy + Sync + Send + Sized {
     // Create a page table entry point to a terminate page or block.
     fn new_page(paddr: PhysAddr, flags: MappingFlags, is_huge: bool) -> Self;
+    // Create a empty entry for page fault.
+    fn new_fault_page(_is_huge: bool) -> Self {
+        panic!("Only implemented for riscv for now.");
+    }
     // Create a page table entry point to a next level page table.
     fn new_table(paddr: PhysAddr) -> Self;
 
