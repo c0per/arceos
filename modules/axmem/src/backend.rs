@@ -1,16 +1,16 @@
-use alloc::sync::Arc;
+use alloc::boxed::Box;
 use axfs::api::FileExt;
 use axio::{Read, Seek, SeekFrom};
-use spinlock::SpinNoIrq;
 
-/// File backend for Lazy load `MapArea`. `file` should be a file holding a offset value.
+/// File backend for Lazy load `MapArea`. `file` should be a file holding a offset value. Normally,
+/// `MemBackend` won't share a file with other things, so we use a `Box` here.
 pub struct MemBackend {
-    file: Arc<SpinNoIrq<dyn FileExt>>,
+    file: Box<dyn FileExt>,
 }
 
 impl MemBackend {
-    pub fn new(file: Arc<SpinNoIrq<dyn FileExt>>, offset: u64) -> Self {
-        let _ = file.lock().seek(SeekFrom::Start(offset)).unwrap();
+    pub fn new(mut file: Box<dyn FileExt>, offset: u64) -> Self {
+        let _ = file.seek(SeekFrom::Start(offset)).unwrap();
 
         Self { file }
     }
@@ -24,40 +24,40 @@ impl MemBackend {
     }
 
     pub fn read_from_seek(&mut self, pos: SeekFrom, buf: &mut [u8]) -> Result<usize, axio::Error> {
-        self.file.lock().read_from_seek(pos, buf)
+        self.file.read_from_seek(pos, buf)
     }
 
-    pub fn write_to_seek(&self, pos: SeekFrom, buf: &[u8]) -> Result<usize, axio::Error> {
-        self.file.lock().write_to_seek(pos, buf)
+    pub fn write_to_seek(&mut self, pos: SeekFrom, buf: &[u8]) -> Result<usize, axio::Error> {
+        self.file.write_to_seek(pos, buf)
     }
 
     pub fn readable(&self) -> bool {
-        self.file.lock().readable()
+        self.file.readable()
     }
 
     pub fn writable(&self) -> bool {
-        self.file.lock().writable()
+        self.file.writable()
     }
 }
 
 impl Clone for MemBackend {
     fn clone(&self) -> Self {
-        let file = self.file.lock().clone_file();
+        let file = self.file.clone_file();
 
         Self {
-            file: Arc::new(SpinNoIrq::new(file)),
+            file: Box::new(file),
         }
     }
 }
 
 impl Seek for MemBackend {
     fn seek(&mut self, pos: SeekFrom) -> axio::Result<u64> {
-        self.file.lock().seek(pos)
+        self.file.seek(pos)
     }
 }
 
 impl Read for MemBackend {
     fn read(&mut self, buf: &mut [u8]) -> axio::Result<usize> {
-        self.file.lock().read(buf)
+        self.file.read(buf)
     }
 }

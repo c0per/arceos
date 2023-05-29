@@ -1,9 +1,8 @@
-use alloc::sync::Arc;
+use alloc::boxed::Box;
 use axhal::mem::VirtAddr;
 use axhal::paging::MappingFlags;
 use axmem::MemBackend;
 use axsyscall::mem::SyscallMem;
-use spinlock::SpinNoIrq;
 
 use crate::scheduler::CurrentTask;
 
@@ -73,7 +72,7 @@ impl SyscallMem for SyscallMemImpl {
             // file backend
             info!("[mmap] fd: {}, offset: 0x{:x}", fd, offset);
             let file = match current.fd_table.lock().query_fd(fd) {
-                Some(file) => Arc::new(SpinNoIrq::new(file.lock().clone_file())),
+                Some(file) => Box::new(file.lock().clone_file()),
                 // fd not found
                 None => return -1,
             };

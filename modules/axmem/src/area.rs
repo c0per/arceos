@@ -142,13 +142,13 @@ impl MapArea {
         self.pages[page_index] = Some(page);
     }
 
-    pub fn sync_page_with_backend(&self, page_index: usize) {
+    pub fn sync_page_with_backend(&mut self, page_index: usize) {
         if page_index >= self.pages.len() {
             panic!("Sync page index out of bound");
         }
 
         if let Some(page) = &self.pages[page_index] {
-            if let Some(backend) = &self.backend {
+            if let Some(backend) = &mut self.backend {
                 if backend.writable() {
                     let _ = backend
                         .write_to_seek(
@@ -173,9 +173,11 @@ impl MapArea {
 
         // sync allocated pages to file
         if self.backend.is_some() {
-            (0..delete_pages)
-                .filter(|idx| self.pages[*idx].is_some())
-                .for_each(|idx| self.sync_page_with_backend(idx));
+            for idx in 0..delete_pages {
+                if self.pages[idx].is_some() {
+                    self.sync_page_with_backend(idx);
+                }
+            }
         }
 
         // move backend offset
@@ -202,9 +204,11 @@ impl MapArea {
 
         if self.backend.is_some() {
             // sync allocated pages to file
-            ((self.pages.len() - delete_pages)..self.pages.len())
-                .filter(|idx| self.pages[*idx].is_some())
-                .for_each(|idx| self.sync_page_with_backend(idx));
+            for idx in (self.pages.len() - delete_pages)..self.pages.len() {
+                if self.pages[idx].is_some() {
+                    self.sync_page_with_backend(idx);
+                }
+            }
         };
 
         // remove (dealloc) phys pages
@@ -331,10 +335,11 @@ impl MapArea {
             ..((right_start.as_usize() - self.vaddr.as_usize()) / PAGE_SIZE_4K);
 
         // sync allocated pages to file
-        delete_range
-            .clone()
-            .filter(|idx| self.pages[*idx].is_some())
-            .for_each(|idx| self.sync_page_with_backend(idx));
+        for idx in delete_range.clone() {
+            if self.pages[idx].is_some() {
+                self.sync_page_with_backend(idx);
+            }
+        }
 
         // create a right area
         let pages = self
@@ -415,10 +420,10 @@ impl MapArea {
 
 impl Drop for MapArea {
     fn drop(&mut self) {
-        self.pages
-            .iter()
-            .enumerate()
-            .filter(|(_, page)| page.is_some())
-            .for_each(|(page_index, _)| self.sync_page_with_backend(page_index))
+        for idx in 0..self.pages.len() {
+            if self.pages[idx].is_some() {
+                self.sync_page_with_backend(idx);
+            }
+        }
     }
 }
