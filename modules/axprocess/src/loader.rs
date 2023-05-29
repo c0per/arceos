@@ -82,6 +82,11 @@ impl<'a> Loader<'a> {
 
         // Allocate memory for user stack and hold it in memory_set
         let ustack_bottom = VirtAddr::from(0x3fe5_0000);
+        debug!(
+            "[new region] user stack: [{:?}, {:?})",
+            ustack_bottom,
+            (ustack_bottom + TASK_STACK_SIZE).align_up_4k()
+        );
         memory_set.new_region(
             ustack_bottom,
             TASK_STACK_SIZE,
@@ -131,16 +136,18 @@ impl<'a> Loader<'a> {
 
             // env
             let env = vec![
-                    "SHLVL=1",
-                    "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-                    "PWD=/",
-                    "GCC_EXEC_PREFIX=/riscv64-linux-musl-native/bin/../lib/gcc/",
-                    "COLLECT_GCC=./riscv64-linux-musl-native/bin/riscv64-linux-musl-gcc",
-                    "COLLECT_LTO_WRAPPER=/riscv64-linux-musl-native/bin/../libexec/gcc/riscv64-linux-musl/11.2.1/lto-wrapper",
-                    "COLLECT_GCC_OPTIONS='-march=rv64gc' '-mabi=lp64d' '-march=rv64imafdc' '-dumpdir' 'a.'",
-                    "COMPILER_PATH=/riscv64-linux-musl-native/bin/../libexec/gcc/riscv64-linux-musl/11.2.1/:/riscv64-linux-musl-native/bin/../libexec/gcc/:/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/../../../../riscv64-linux-musl/bin/",
-                    "LIBRARY_PATH=/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/:/riscv64-linux-musl-native/bin/../lib/gcc/:/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/../../../../riscv64-linux-musl/lib/:/riscv64-linux-musl-native/bin/../lib/:/riscv64-linux-musl-native/bin/../usr/lib/",
-                ];
+                "SHLVL=1",
+                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+                "PWD=/",
+                // "GCC_EXEC_PREFIX=/riscv64-linux-musl-native/bin/../lib/gcc/", // ?
+                // "COLLECT_GCC=./riscv64-linux-musl-native/bin/riscv64-linux-musl-gcc",
+                // "COLLECT_LTO_WRAPPER=/riscv64-linux-musl-native/bin/../libexec/gcc/riscv64-linux-musl/11.2.1/lto-wrapper",
+                // "COLLECT_GCC_OPTIONS='-march=rv64gc' '-mabi=lp64d' '-march=rv64imafdc' '-dumpdir' 'a.'",
+                // "COMPILER_PATH=/riscv64-linux-musl-native/bin/../libexec/gcc/riscv64-linux-musl/11.2.1/:/riscv64-linux-musl-native/bin/../libexec/gcc/:/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/../../../../riscv64-linux-musl/bin/",
+                // "LIBRARY_PATH=/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/:/riscv64-linux-musl-native/bin/../lib/gcc/:/riscv64-linux-musl-native/bin/../lib/gcc/riscv64-linux-musl/11.2.1/../../../../riscv64-linux-musl/lib/:/riscv64-linux-musl-native/bin/../lib/:/riscv64-linux-musl-native/bin/../usr/lib/",
+                "LIBRARY_PATH=/lib/",
+                "LD_LIBRARY_PATH=/lib/",
+            ];
             let envs: Vec<_> = env.iter().map(|item| task.push_str(item)).collect();
 
             // args

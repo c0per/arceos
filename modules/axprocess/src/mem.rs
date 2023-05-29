@@ -1,7 +1,9 @@
+use alloc::sync::Arc;
 use axhal::mem::VirtAddr;
 use axhal::paging::MappingFlags;
 use axmem::MemBackend;
 use axsyscall::mem::SyscallMem;
+use spinlock::SpinNoIrq;
 
 use crate::scheduler::CurrentTask;
 
@@ -69,8 +71,9 @@ impl SyscallMem for SyscallMemImpl {
                 .mmap(start.into(), len, prot, fixed, None)
         } else {
             // file backend
+            info!("[mmap] fd: {}, offset: 0x{:x}", fd, offset);
             let file = match current.fd_table.lock().query_fd(fd) {
-                Some(file) => file.clone(),
+                Some(file) => Arc::new(SpinNoIrq::new(file.lock().clone_file())),
                 // fd not found
                 None => return -1,
             };
@@ -96,9 +99,30 @@ impl SyscallMem for SyscallMemImpl {
 
         0
     }
+
+    fn mprotect(start: usize, len: usize, prot: u32) -> isize {
+        let prot: MappingFlags = MMapProtFlag::from_bits(prot)
+            .expect("MMap prot not supported.")
+            .into();
+
+        info!(
+            "[mprotect] addr: [{:?}, {:?}), flags: {:?}",
+            start,
+            start + len,
+            prot
+        );
+
+        let current = CurrentTask::try_get().expect("No current task");
+        current.memory_set.lock().mprotect(start.into(), len, prot);
+
+        unsafe { riscv::asm::sfence_vma_all() };
+
+        0
+    }
 }
 
 pub fn handle_page_fault(addr: VirtAddr, flags: MappingFlags) {
+    info!("'page fault' addr: {:?}, flags: {:?}", addr, flags);
     let current = CurrentTask::try_get().expect("No current task");
 
     current.memory_set.lock().handle_page_fault(addr, flags);

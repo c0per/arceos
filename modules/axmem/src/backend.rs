@@ -3,6 +3,7 @@ use axfs::api::FileExt;
 use axio::{Read, Seek, SeekFrom};
 use spinlock::SpinNoIrq;
 
+/// File backend for Lazy load `MapArea`. `file` should be a file holding a offset value.
 pub struct MemBackend {
     file: Arc<SpinNoIrq<dyn FileExt>>,
 }
@@ -28,6 +29,14 @@ impl MemBackend {
 
     pub fn write_to_seek(&self, pos: SeekFrom, buf: &[u8]) -> Result<usize, axio::Error> {
         self.file.lock().write_to_seek(pos, buf)
+    }
+
+    pub fn readable(&self) -> bool {
+        self.file.lock().readable()
+    }
+
+    pub fn writable(&self) -> bool {
+        self.file.lock().writable()
     }
 }
 

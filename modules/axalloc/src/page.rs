@@ -113,10 +113,22 @@ impl PhysPage {
             .map_err(alloc_err_to_ax_err)
     }
 
-    pub fn alloc_contiguous(num_pages: usize, align_pow2: usize) -> AxResult<Vec<Option<Self>>> {
+    pub fn alloc_contiguous(
+        num_pages: usize,
+        align_pow2: usize,
+        data: Option<&[u8]>,
+    ) -> AxResult<Vec<Option<Self>>> {
         global_allocator()
             .alloc_pages(num_pages, align_pow2)
             .map(|vaddr| {
+                let pages = unsafe {
+                    core::slice::from_raw_parts_mut(vaddr as *mut u8, num_pages * PAGE_SIZE)
+                };
+                pages.fill(0);
+                if let Some(data) = data {
+                    pages[..data.len()].copy_from_slice(data);
+                }
+
                 (0..num_pages)
                     .map(|page_idx| {
                         Some(PhysPage {

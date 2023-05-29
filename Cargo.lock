@@ -286,6 +286,7 @@ name = "axmem"
 version = "0.1.0"
 dependencies = [
  "axalloc",
+ "axconfig",
  "axfs",
  "axhal",
  "axio",
@@ -373,6 +374,7 @@ name = "axsyscall"
 version = "0.1.0"
 dependencies = [
  "crate_interface",
+ "log",
  "num-derive",
  "num-traits",
 ]

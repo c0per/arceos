@@ -224,6 +224,29 @@ impl<M: PagingMetaData, PTE: GenericPTE, IF: PagingIf> PageTable64<M, PTE, IF> {
         Ok(())
     }
 
+    /// Update the mapping flags of an entry. Return the page size on success.
+    pub fn update(&mut self, vaddr: VirtAddr, flags: MappingFlags) -> PagingResult<PageSize> {
+        let (pte, page_size) = self.get_entry_mut(vaddr)?;
+
+        *pte = GenericPTE::new_page(pte.paddr(), flags, pte.is_huge());
+
+        Ok(page_size)
+    }
+
+    pub fn update_region(
+        &mut self,
+        mut vaddr: VirtAddr,
+        size: usize,
+        flags: MappingFlags,
+    ) -> PagingResult {
+        let end = vaddr + size;
+        while vaddr < end {
+            let page_size = self.update(vaddr, flags)?;
+            vaddr += page_size as usize;
+        }
+        Ok(())
+    }
+
     pub fn walk<F>(&self, limit: usize, func: &F) -> PagingResult
     where
         F: Fn(usize, usize, VirtAddr, &PTE),

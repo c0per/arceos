@@ -4,7 +4,7 @@ use riscv::register::{
     stval,
 };
 
-use crate::trap::handle_page_fault;
+use crate::{mem::virt_to_phys, trap::handle_page_fault};
 
 use super::TrapFrame;
 
@@ -21,7 +21,7 @@ fn handle_breakpoint(sepc: &mut usize) {
 }
 
 #[no_mangle]
-fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
+fn riscv_trap_handler(tf: &mut TrapFrame, from_user: bool) {
     let scause = scause::read();
     match scause.cause() {
         Trap::Exception(E::Breakpoint) => handle_breakpoint(&mut tf.sepc),
@@ -39,18 +39,26 @@ fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
                 ],
             ) as usize;
 
-            trace!("Syscall handled. Returning to U mode.");
+            info!("Syscall handled. Returning to U mode.");
+        }
+
+        Trap::Exception(E::InstructionPageFault) => {
+            if !from_user {
+                unimplemented!("I page fault from kernel");
+            }
+
+            let addr = stval::read();
+
+            handle_page_fault(addr.into(), MappingFlags::USER | MappingFlags::EXECUTE);
         }
 
         Trap::Exception(E::LoadPageFault) => {
-            trace!("Handling load page fault.");
             let addr = stval::read();
 
             handle_page_fault(addr.into(), MappingFlags::USER | MappingFlags::READ);
         }
 
         Trap::Exception(E::StorePageFault) => {
-            trace!("Handling store page fault.");
             let addr = stval::read();
 
             handle_page_fault(addr.into(), MappingFlags::USER | MappingFlags::WRITE);
@@ -58,10 +66,12 @@ fn riscv_trap_handler(tf: &mut TrapFrame, _from_user: bool) {
 
         Trap::Interrupt(_) => crate::trap::handle_irq_extern(scause.bits()),
         _ => {
+            error!("instruction: 0x{:x}", unsafe { *(tf.sepc as *const u32) });
             panic!(
-                "Unhandled trap {:?} @ {:#x}:\n{:#x?}",
+                "Unhandled trap {:?} @ {:#x}, phys addr: {:#x}\n{:#x?}",
                 scause.cause(),
                 tf.sepc,
+                virt_to_phys(tf.sepc.into()),
                 tf
             );
         }

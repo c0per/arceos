@@ -10,6 +10,7 @@ authors = ["Jiayu Chen <c0percn@gmail.com>"]
 log = "0.4"
 axhal = { path = "../axhal", features = ["paging"] }
 axalloc = { path = "../axalloc" }
+axconfig = { path = "../axconfig" }
 axfs = { path = "../axfs" }
 axio = { path = "../../crates/axio" }
 spinlock = { path = "../../crates/spinlock" }

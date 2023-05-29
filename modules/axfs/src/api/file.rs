@@ -188,6 +188,10 @@ impl Seek for File {
 
 #[cfg(feature = "file-ext")]
 pub trait FileExt: Read + Write + Seek {
+    fn readable(&self) -> bool;
+    fn writable(&self) -> bool;
+    fn executable(&self) -> bool;
+
     fn clone_file(&self) -> File {
         panic!("clone file not implemented for FileExt");
     }
@@ -198,15 +202,18 @@ pub trait FileExt: Read + Write + Seek {
         let old_pos = self
             .seek(SeekFrom::Current(0))
             .expect("Error get current pos in file");
+        info!("    'read_from_seek' old_pos: {}", old_pos);
 
         // seek to read position
         let _ = self.seek(pos).unwrap();
 
         // read
-        let read_len = self.read(buf);
+        let read_len = self.read_full(buf);
 
         // seek back to old_pos
-        let _ = self.seek(SeekFrom::Start(old_pos)).unwrap();
+        let new_pos = self.seek(SeekFrom::Start(old_pos)).unwrap();
+
+        assert_eq!(old_pos, new_pos);
 
         read_len
     }
@@ -232,6 +239,18 @@ pub trait FileExt: Read + Write + Seek {
 
 #[cfg(feature = "file-ext")]
 impl FileExt for File {
+    fn readable(&self) -> bool {
+        self.inner.readable()
+    }
+
+    fn writable(&self) -> bool {
+        self.inner.writable()
+    }
+
+    fn executable(&self) -> bool {
+        self.inner.executable()
+    }
+
     fn clone_file(&self) -> File {
         self.clone()
     }

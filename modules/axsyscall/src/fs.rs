@@ -16,6 +16,10 @@ pub(super) fn write(fd: usize, buf: *const u8, count: usize) -> isize {
     call_interface!(SyscallFs::write, fd, buf, count)
 }
 
+pub(super) fn write_v(fd: usize, io_vec: *const IoVec, io_v_cnt: isize) -> isize {
+    call_interface!(SyscallFs::write_v, fd, io_vec, io_v_cnt)
+}
+
 pub(super) fn fstat(fd: usize, kst: *mut Kstat) -> isize {
     call_interface!(SyscallFs::fstat, fd, kst)
 }
@@ -26,7 +30,14 @@ pub trait SyscallFs {
     fn close(fd: usize) -> isize;
     fn read(fd: usize, buf: *const u8, count: usize) -> isize;
     fn write(fd: usize, buf: *const u8, count: usize) -> isize;
+    fn write_v(fd: usize, io_vec: *const IoVec, io_v_cnt: isize) -> isize;
     fn fstat(fd: usize, kst: *mut Kstat) -> isize;
+}
+
+#[repr(C)]
+pub struct IoVec {
+    pub io_v_base: *mut u8,
+    pub io_v_len: usize,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -191,6 +191,18 @@ impl File {
     pub fn get_attr(&self) -> AxResult<FileAttr> {
         self.node.access(Cap::empty())?.get_attr()
     }
+
+    pub fn readable(&self) -> bool {
+        self.node.can_access(Cap::READ)
+    }
+
+    pub fn writable(&self) -> bool {
+        self.node.can_access(Cap::WRITE)
+    }
+
+    pub fn executable(&self) -> bool {
+        self.node.can_access(Cap::EXECUTE)
+    }
 }
 
 impl Directory {

@@ -1,6 +1,6 @@
 use super::scheduler::CurrentTask;
 use crate::utils::raw_ptr_to_ref_str;
-use axsyscall::fs::{Kstat, SyscallFs};
+use axsyscall::fs::{IoVec, Kstat, SyscallFs};
 use bitflags::bitflags;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
@@ -31,8 +31,8 @@ impl SyscallFs for SyscallFsImpl {
                 // const O_NOCTTY = 1 << 8;
                 // const O_TRUNC = 1 << 9;
                 // const O_DIRECTORY = 1 << 16;
-                // const O_NOFOLLOW = 1 << 17;
-                // const O_CLOEXEC = 1 << 19;
+                const O_NOFOLLOW = 1 << 17;
+                const O_CLOEXEC = 1 << 19;
 
                 // status flags
                 // const O_APPEND = 1 << 10;
@@ -68,6 +68,8 @@ impl SyscallFs for SyscallFsImpl {
         let current = CurrentTask::try_get().expect("No current task");
         let mut fd_table = current.fd_table().lock();
 
+        info!("[close] fd: {}", fd);
+
         if fd < fd_table.len() {
             // This function will panic if fd is out of bound.
             fd_table.remove(fd);
@@ -85,11 +87,20 @@ impl SyscallFs for SyscallFsImpl {
 
         let buf = unsafe { from_raw_parts_mut(buf as *mut u8, count) };
 
-        if let Some(file) = fd_table.query_fd(fd) {
-            file.lock().read(buf).map_or(-1, |res| res as isize)
+        let read_res = if let Some(file) = fd_table.query_fd(fd) {
+            file.lock().read_full(buf).map_or(-1, |res| res as isize)
         } else {
             -1
-        }
+        };
+
+        info!(
+            "[read] read len: {} / {}; buffer vaddr: 0x{:x}",
+            read_res,
+            buf.len(),
+            buf.as_ptr() as usize
+        );
+
+        read_res
     }
 
     fn write(fd: usize, buf: *const u8, count: usize) -> isize {
@@ -103,6 +114,26 @@ impl SyscallFs for SyscallFsImpl {
         } else {
             -1
         }
+    }
+
+    fn write_v(fd: usize, io_vec: *const IoVec, io_v_cnt: isize) -> isize {
+        let mut io_vec = io_vec;
+
+        debug!("write_v, {} vecs", io_v_cnt);
+        let mut total_size = 0;
+        for _ in 0..io_v_cnt {
+            let vec = unsafe { &*io_vec };
+            debug!("write_v to {:?}, len: {}", vec.io_v_base, vec.io_v_len);
+            if vec.io_v_len > 0 {
+                total_size += Self::write(fd, vec.io_v_base, vec.io_v_len);
+            }
+
+            io_vec = unsafe { io_vec.offset(1) };
+        }
+
+        debug!("write_v total: {}", total_size);
+
+        total_size
     }
 
     // TODO

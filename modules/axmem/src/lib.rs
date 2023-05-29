@@ -112,7 +112,10 @@ impl MemorySet {
                     flags |= MappingFlags::EXECUTE;
                 }
 
-                debug!("elf section [0x{:x}, 0x{:x})", start_va, end_va);
+                debug!(
+                    "[new region] elf section [0x{:x}, 0x{:x})",
+                    start_va, end_va
+                );
 
                 self.new_region(
                     VirtAddr::from(start_va),
@@ -122,6 +125,8 @@ impl MemorySet {
                     None,
                 );
             });
+
+        info!("[loader] base addr: 0x{:x}", base_addr);
 
         // Relocate .rela.dyn sections
         if let Some(rela_dyn) = elf.find_section_by_name(".rela.dyn") {
@@ -153,7 +158,12 @@ impl MemorySet {
                             let value = sym_val + entry.get_addend() as usize;
                             let addr = base_addr + entry.get_offset() as usize;
 
-                            info!("relocating: addr 0x{:x}", addr);
+                            info!(
+                                "write: {:#x} @ {:#x} type = {}",
+                                value,
+                                addr,
+                                entry.get_type() as usize
+                            );
 
                             unsafe {
                                 copy_nonoverlapping(
@@ -167,7 +177,12 @@ impl MemorySet {
                             let value = base_addr + entry.get_addend() as usize;
                             let addr = base_addr + entry.get_offset() as usize;
 
-                            info!("relocating: addr 0x{:x}", addr);
+                            info!(
+                                "write: {:#x} @ {:#x} type = {}",
+                                value,
+                                addr,
+                                entry.get_type() as usize
+                            );
 
                             unsafe {
                                 copy_nonoverlapping(
@@ -215,13 +230,18 @@ impl MemorySet {
                         let value = base_addr + sym_val;
                         let addr = base_addr + entry.get_offset() as usize;
 
-                        info!("relocating: addr 0x{:x}", addr);
+                        info!(
+                            "write: {:#x} @ {:#x} type = {}",
+                            value,
+                            addr,
+                            entry.get_type() as usize
+                        );
 
                         unsafe {
                             copy_nonoverlapping(
                                 value.to_ne_bytes().as_ptr(),
                                 addr as *mut u8,
-                                size_of::<usize>() / size_of::<u8>(),
+                                size_of::<usize>(),
                             );
                         }
                     }
@@ -268,16 +288,14 @@ impl MemorySet {
         let num_pages = (size + PAGE_SIZE_4K - 1) / PAGE_SIZE_4K;
 
         let area = match data {
-            Some(data) => {
-                let mut area =
-                    MapArea::new_alloc(vaddr, num_pages, flags, backend, &mut self.page_table);
-
-                // clear the allocated region and copy data
-                area.fill(0);
-                area.as_slice_mut()[..data.len()].copy_from_slice(data);
-
-                area
-            }
+            Some(data) => MapArea::new_alloc(
+                vaddr,
+                num_pages,
+                flags,
+                Some(data),
+                backend,
+                &mut self.page_table,
+            ),
             None => MapArea::new_lazy(vaddr, num_pages, flags, backend, &mut self.page_table),
         };
 
@@ -298,58 +316,77 @@ impl MemorySet {
     /// TODO: maybe edit map area size in place.
     fn split_for_area(&mut self, start: VirtAddr, size: usize) {
         let end = start + size;
+        assert!(end.is_aligned_4k());
+
         let overlapped_area = self
             .owned_mem
-            .drain_filter(|area| area.overlap_with(start, end))
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, area)| area.overlap_with(start, end))
             .collect::<Vec<_>>();
 
         info!("splitting for [{:?}, {:?})", start, end);
 
-        for area in overlapped_area {
-            info!("    splitting [{:?}, {:?})", area.vaddr, area.end_va());
+        let mut new_areas = Vec::with_capacity(1);
+        // It Contains indices of areas to remove from self.owned_mem. NOTE: This vector must be in
+        // ascending order.
+        let mut removed_area_idx = Vec::new();
 
-            // remove records in page table
-            let _ = self
-                .page_table
-                .unmap_region(area.vaddr, area.size())
-                .unwrap();
-
-            let area_start = usize::from(area.vaddr);
-            let area_end = area_start + area.size();
-            let area_data = area.as_slice();
-
-            let start = usize::from(start);
-            let end = usize::from(end);
-
-            // create a new area for [area_start, start)
-            if area_start < start {
+        for (idx, area) in overlapped_area {
+            if area.contained_in(start, end) {
+                info!("  drop [{:?}, {:?})", area.vaddr, area.end_va());
+                // drop area
+                removed_area_idx.push(idx);
+            } else if area.strict_contain(start, end) {
                 info!(
-                    "        create left area [0x{:x}, 0x{:x})",
-                    area_start, start
+                    "  split [{:?}, {:?}) into 2 areas",
+                    area.vaddr,
+                    area.end_va()
                 );
-                self.new_region(
-                    area_start.into(),
-                    start - area_start,
-                    area.flags,
-                    Some(&area_data[..start - area_start]),
-                    area.backend.as_ref().map(|b| b.clone()),
+                let new_area = area.remove_mid(start, end, &mut self.page_table);
+                new_areas.push(new_area);
+            } else if start <= area.vaddr && area.vaddr < end {
+                info!(
+                    "  shrink_left [{:?}, {:?}) to [{:?}, {:?})",
+                    area.vaddr,
+                    area.end_va(),
+                    end,
+                    area.end_va()
                 );
-            }
-
-            // create a new area for [end, area_end)
-            if end < area_end {
-                info!("        create right area [0x{:x}, 0x{:x})", end, area_end);
-                self.new_region(
-                    end.into(),
-                    area_end - end,
-                    area.flags,
-                    Some(&area_data[end - area_start..]),
-                    area.backend
-                        .as_ref()
-                        .map(|b| b.clone_with_delta((end - area_start) as i64)),
+                area.shrink_left(end, &mut self.page_table);
+            } else {
+                info!(
+                    "  shrink_right [{:?}, {:?}) to [{:?}, {:?})",
+                    area.vaddr,
+                    area.end_va(),
+                    area.vaddr,
+                    start
                 );
+                area.shrink_right(start, &mut self.page_table);
             }
         }
+
+        // remove areas with indices from big to small
+        removed_area_idx
+            .into_iter()
+            .rev()
+            .for_each(|idx| drop(self.owned_mem.remove(idx)));
+
+        self.owned_mem.extend(new_areas);
+    }
+
+    fn find_free_area(&self, hint: VirtAddr, size: usize) -> Option<VirtAddr> {
+        let mut last_end = hint.max(axconfig::USER_MEMORY_START.into());
+
+        // TODO: 维护 self.owned_mem 有序
+        for area in &self.owned_mem {
+            if last_end + size <= area.vaddr {
+                return Some(last_end);
+            }
+            last_end = area.end_va();
+        }
+
+        None
     }
 
     /// mmap. You need to flush tlb after this.
@@ -364,7 +401,16 @@ impl MemorySet {
         // align up to 4k
         let size = (size + PAGE_SIZE_4K - 1) / PAGE_SIZE_4K * PAGE_SIZE_4K;
 
-        if fixed {
+        debug!(
+            "[mmap] vaddr: [{:?}, {:?}), {:?}, fixed: {}, backend: {}",
+            start,
+            start + size,
+            flags,
+            fixed,
+            backend.is_some()
+        );
+
+        let addr = if fixed {
             self.split_for_area(start, size);
 
             self.new_region(start, size, flags, None, backend);
@@ -373,21 +419,86 @@ impl MemorySet {
 
             start.as_usize() as isize
         } else {
-            // TODO: find a place between map areas.
+            let start = self.find_free_area(start, size);
 
-            let start = (self.max_va() + PAGE_SIZE_4K).align_up_4k();
-            self.new_region(start, size, flags, None, backend);
+            match start {
+                Some(start) => {
+                    self.new_region(start, size, flags, None, backend);
 
-            start.as_usize() as isize
-        }
+                    start.as_usize() as isize
+                }
+                None => -1,
+            }
+        };
+
+        debug!("[mmap] return addr: 0x{:x}", addr);
+
+        addr
     }
 
     /// munmap. You need to flush TLB after this.
     pub fn munmap(&mut self, start: VirtAddr, size: usize) {
         // align up to 4k
         let size = (size + PAGE_SIZE_4K - 1) / PAGE_SIZE_4K * PAGE_SIZE_4K;
+        info!("[munmap] [{:?}, {:?})", start, (start + size).align_up_4k());
 
         self.split_for_area(start, size);
+    }
+
+    /// Edit the page table to update flags in given virt address segment. You need to flush TLB
+    /// after calling this function.
+    ///
+    /// NOTE: It's possible that this function will break map areas into two for different mapping
+    /// flag settings.
+    pub fn mprotect(&mut self, start: VirtAddr, size: usize, flags: MappingFlags) {
+        info!(
+            "[mprotect] addr: [{:?}, {:?}), flags: {:?}",
+            start,
+            start + size,
+            flags
+        );
+        let end = start + size;
+        assert!(end.is_aligned_4k());
+
+        let overlapped_area = self
+            .owned_mem
+            .iter_mut()
+            .filter(|area| area.overlap_with(start, end))
+            .collect::<Vec<_>>();
+
+        // 2 new areas at most
+        let mut new_areas = Vec::with_capacity(2);
+
+        for area in overlapped_area {
+            if area.contained_in(start, end) {
+                // update whole area
+                area.update_flags(flags, &mut self.page_table);
+            } else if area.strict_contain(start, end) {
+                // split into 3 areas, update the middle one
+                let (mut mid, right) = area.split3(start, end);
+
+                mid.update_flags(flags, &mut self.page_table);
+
+                new_areas.push(mid);
+                new_areas.push(right);
+            } else if start <= area.vaddr && area.vaddr < end {
+                // split into 2 areas, update the left one
+                let right = area.split(end);
+
+                area.update_flags(flags, &mut self.page_table);
+
+                new_areas.push(right);
+            } else {
+                // split into 2 areas, update the right one
+                let mut right = area.split(start);
+
+                right.update_flags(flags, &mut self.page_table);
+
+                new_areas.push(right);
+            }
+        }
+
+        self.owned_mem.extend(new_areas);
     }
 
     /// It will map newly allocated page in the page table. You need to flush TLB after this.
@@ -398,7 +509,7 @@ impl MemorySet {
             .find(|area| area.vaddr <= addr && addr < area.end_va())
         {
             Some(area) => area.handle_page_fault(addr, flags, &mut self.page_table),
-            None => panic!("unhandled page fault"),
+            None => error!("Page fault address {:?} not found in memory set", addr),
         }
     }
 }

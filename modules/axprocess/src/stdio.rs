@@ -26,7 +26,19 @@ impl Seek for Stdin {
     }
 }
 
-impl FileExt for Stdin {}
+impl FileExt for Stdin {
+    fn readable(&self) -> bool {
+        true
+    }
+
+    fn writable(&self) -> bool {
+        false
+    }
+
+    fn executable(&self) -> bool {
+        false
+    }
+}
 
 pub(crate) struct Stdout;
 
@@ -55,7 +67,19 @@ impl Seek for Stdout {
     }
 }
 
-impl FileExt for Stdout {}
+impl FileExt for Stdout {
+    fn readable(&self) -> bool {
+        false
+    }
+
+    fn writable(&self) -> bool {
+        true
+    }
+
+    fn executable(&self) -> bool {
+        false
+    }
+}
 
 pub(crate) struct Stderr;
 
@@ -84,4 +108,16 @@ impl Seek for Stderr {
     }
 }
 
-impl FileExt for Stderr {}
+impl FileExt for Stderr {
+    fn readable(&self) -> bool {
+        false
+    }
+
+    fn writable(&self) -> bool {
+        true
+    }
+
+    fn executable(&self) -> bool {
+        false
+    }
+}
