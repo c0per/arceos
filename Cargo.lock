@@ -328,6 +328,8 @@ dependencies = [
  "kernel_guard",
  "lazy_init",
  "log",
+ "num-derive",
+ "num-traits",
  "riscv",
  "scheduler",
  "spinlock",

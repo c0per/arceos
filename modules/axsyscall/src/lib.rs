@@ -14,6 +14,7 @@ pub mod time;
 #[derive(FromPrimitive)]
 #[repr(usize)]
 pub enum SyscallId {
+    Fcntl = 25,
     OpenAt = 56,
     Close = 57,
     Read = 63,
@@ -36,6 +37,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     if let Some(id) = SyscallId::from_usize(syscall_id) {
         use SyscallId::*;
         match id {
+            Fcntl => fs::fcntl(args[0], args[1], args[2]),
             OpenAt => fs::open_at(
                 args[0],
                 args[1] as *const u8,

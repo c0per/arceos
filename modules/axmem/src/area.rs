@@ -258,9 +258,6 @@ impl MapArea {
         assert!(self.vaddr < start);
         assert!(end < self.end_va());
 
-        let split_size = self.end_va().as_usize() - start.as_usize();
-        let split_page_count = split_size / PAGE_SIZE_4K;
-
         let right_pages = self
             .pages
             .drain(

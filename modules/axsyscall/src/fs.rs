@@ -1,5 +1,9 @@
 use crate_interface::{call_interface, def_interface};
 
+pub(super) fn fcntl(fd: usize, cmd: usize, arg: usize) -> isize {
+    call_interface!(SyscallFs::fcntl, fd, cmd, arg)
+}
+
 pub(super) fn open_at(fd: usize, filename: *const u8, flags: u32, mode: i32) -> isize {
     call_interface!(SyscallFs::open_at, fd, filename, flags, mode)
 }
@@ -26,6 +30,7 @@ pub(super) fn fstat(fd: usize, kst: *mut Kstat) -> isize {
 
 #[def_interface]
 pub trait SyscallFs {
+    fn fcntl(fd: usize, cmd: usize, arg: usize) -> isize;
     fn open_at(fd: usize, filename: *const u8, flags: u32, mode: i32) -> isize;
     fn close(fd: usize) -> isize;
     fn read(fd: usize, buf: *const u8, count: usize) -> isize;

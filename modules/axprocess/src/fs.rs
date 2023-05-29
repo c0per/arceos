@@ -1,14 +1,58 @@
 use super::scheduler::CurrentTask;
 use crate::utils::raw_ptr_to_ref_str;
+use alloc::sync::Arc;
 use axsyscall::fs::{IoVec, Kstat, SyscallFs};
 use bitflags::bitflags;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+use spinlock::SpinNoIrq;
 
 struct SyscallFsImpl;
 
 #[cfg(feature = "fs")]
 #[crate_interface::impl_interface]
 impl SyscallFs for SyscallFsImpl {
+    fn fcntl(fd: usize, cmd: usize, arg: usize) -> isize {
+        #[derive(FromPrimitive)]
+        #[repr(usize)]
+        #[allow(non_camel_case_types)]
+        enum FcntlCmd {
+            // Duplicating a file descriptor
+            F_DUPFD = 0,
+            // F_DUPFD_CLOEXEC = 1030,
+
+            // File descriptor flags
+            // F_GETFD = 1,
+            // F_SETFD = 2,
+
+            // File status flags
+            // F_GETFL = 3,
+            // F_SETFL = 3,
+        }
+
+        let Some(cmd) = FcntlCmd::from_usize(cmd) else {
+            return -1;
+        };
+
+        let current = CurrentTask::try_get().expect("No current task");
+        let mut fd_table = current.fd_table().lock();
+        let Some(file) = fd_table.query_fd(fd) else {
+            return -1;
+        };
+
+        use FcntlCmd::*;
+        match cmd {
+            F_DUPFD => {
+                // clone a `Arc` pointing to the same file. *Duplicated fd share offset and file
+                // struct.*
+                let file = file.clone();
+
+                fd_table.alloc_hint(arg, file) as isize
+            }
+        }
+    }
+
     /// Open a file under directory noted by fd.
     /// flags: access mode, creation flags and status flags
     fn open_at(fd: usize, pathname: *const u8, flags: u32, mode: i32) -> isize {
@@ -32,7 +76,7 @@ impl SyscallFs for SyscallFsImpl {
                 // const O_TRUNC = 1 << 9;
                 // const O_DIRECTORY = 1 << 16;
                 const O_NOFOLLOW = 1 << 17;
-                const O_CLOEXEC = 1 << 19;
+                const O_CLOEXEC = 1 << 19; // unimplemented
 
                 // status flags
                 // const O_APPEND = 1 << 10;
@@ -58,7 +102,7 @@ impl SyscallFs for SyscallFsImpl {
             let current = CurrentTask::try_get().expect("No current task");
             let mut fd_table = current.fd_table().lock();
 
-            fd_table.alloc_fd(file)
+            fd_table.alloc(Arc::new(SpinNoIrq::new(file))) as isize
         } else {
             -1
         }
