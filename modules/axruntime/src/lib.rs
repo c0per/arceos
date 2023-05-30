@@ -150,7 +150,7 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     {
         #[cfg(feature = "fs")]
         {
-            let task = load_app("argv.dout");
+            let task = load_app("helloworld.dout");
             axprocess::scheduler::start(task);
         }
         #[cfg(not(feature = "fs"))]

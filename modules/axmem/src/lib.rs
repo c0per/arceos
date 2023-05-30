@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(drain_filter)]
+#![feature(btree_drain_filter)]
 
 mod area;
 mod backend;
@@ -36,8 +37,7 @@ pub(crate) const AT_RANDOM: u8 = 25;
 /// PageTable + MemoryArea for a process (task)
 pub struct MemorySet {
     page_table: PageTable,
-    // TODO: use BTree instead for performance
-    owned_mem: Vec<MapArea>,
+    owned_mem: BTreeMap<usize, MapArea>,
     pub entry: usize,
 }
 
@@ -58,7 +58,7 @@ impl MemorySet {
 
         Self {
             page_table,
-            owned_mem: Vec::new(),
+            owned_mem: BTreeMap::new(),
             entry: 0,
         }
     }
@@ -270,9 +270,8 @@ impl MemorySet {
 
     pub fn max_va(&self) -> VirtAddr {
         self.owned_mem
-            .iter()
-            .map(|area| area.end_va())
-            .max()
+            .last_key_value()
+            .map(|(_, area)| area.end_va())
             .unwrap_or_default()
     }
 
@@ -307,36 +306,31 @@ impl MemorySet {
             usize::from(area.vaddr) + area.size(),
         );
 
-        self.owned_mem.push(area);
+        assert!(self.owned_mem.insert(area.vaddr.into(), area).is_none());
     }
 
     /// Make [start, end) unmapped and dealloced. You need to flush TLB after this.
     ///
-    /// NOTE: modified map area will have a different PhysAddr.
-    /// TODO: maybe edit map area size in place.
+    /// NOTE: modified map area will have the same PhysAddr.
     fn split_for_area(&mut self, start: VirtAddr, size: usize) {
         let end = start + size;
         assert!(end.is_aligned_4k());
 
-        let overlapped_area = self
+        // Note: Some areas will have to shrink its left part, so its key in BTree (start vaddr) have to change.
+        // We get all the overlapped areas out first.
+        let overlapped_area: Vec<_> = self
             .owned_mem
-            .iter_mut()
-            .enumerate()
-            .filter(|(_, area)| area.overlap_with(start, end))
-            .collect::<Vec<_>>();
+            .drain_filter(|_, area| area.overlap_with(start, end))
+            .collect();
 
         info!("splitting for [{:?}, {:?})", start, end);
 
-        let mut new_areas = Vec::with_capacity(1);
-        // It Contains indices of areas to remove from self.owned_mem. NOTE: This vector must be in
-        // ascending order.
-        let mut removed_area_idx = Vec::new();
-
-        for (idx, area) in overlapped_area {
+        // Modify areas and insert it back to BTree.
+        for (_, mut area) in overlapped_area {
             if area.contained_in(start, end) {
                 info!("  drop [{:?}, {:?})", area.vaddr, area.end_va());
                 // drop area
-                removed_area_idx.push(idx);
+                drop(area);
             } else if area.strict_contain(start, end) {
                 info!(
                     "  split [{:?}, {:?}) into 2 areas",
@@ -344,7 +338,12 @@ impl MemorySet {
                     area.end_va()
                 );
                 let new_area = area.remove_mid(start, end, &mut self.page_table);
-                new_areas.push(new_area);
+
+                assert!(self
+                    .owned_mem
+                    .insert(new_area.vaddr.into(), new_area)
+                    .is_none());
+                assert!(self.owned_mem.insert(area.vaddr.into(), area).is_none());
             } else if start <= area.vaddr && area.vaddr < end {
                 info!(
                     "  shrink_left [{:?}, {:?}) to [{:?}, {:?})",
@@ -354,6 +353,8 @@ impl MemorySet {
                     area.end_va()
                 );
                 area.shrink_left(end, &mut self.page_table);
+
+                assert!(self.owned_mem.insert(area.vaddr.into(), area).is_none());
             } else {
                 info!(
                     "  shrink_right [{:?}, {:?}) to [{:?}, {:?})",
@@ -363,23 +364,16 @@ impl MemorySet {
                     start
                 );
                 area.shrink_right(start, &mut self.page_table);
+
+                assert!(self.owned_mem.insert(area.vaddr.into(), area).is_none());
             }
         }
-
-        // remove areas with indices from big to small
-        removed_area_idx
-            .into_iter()
-            .rev()
-            .for_each(|idx| drop(self.owned_mem.remove(idx)));
-
-        self.owned_mem.extend(new_areas);
     }
 
     fn find_free_area(&self, hint: VirtAddr, size: usize) -> Option<VirtAddr> {
         let mut last_end = hint.max(axconfig::USER_MEMORY_START.into());
 
-        // TODO: 维护 self.owned_mem 有序
-        for area in &self.owned_mem {
+        for area in self.owned_mem.values() {
             if last_end + size <= area.vaddr {
                 return Some(last_end);
             }
@@ -423,6 +417,7 @@ impl MemorySet {
 
             match start {
                 Some(start) => {
+                    debug!("    found area [{:?}, {:?})", start, start + size);
                     self.new_region(start, size, flags, None, backend);
 
                     start.as_usize() as isize
@@ -460,16 +455,15 @@ impl MemorySet {
         let end = start + size;
         assert!(end.is_aligned_4k());
 
-        let overlapped_area = self
+        // NOTE: There will be new areas but all old aree's start address won't change. But we
+        // can't iterating through `value_mut()` while `insert()` to BTree at the same time, so we
+        // `drain_filter()` out the overlapped areas first.
+        let overlapped_area: Vec<_> = self
             .owned_mem
-            .iter_mut()
-            .filter(|area| area.overlap_with(start, end))
-            .collect::<Vec<_>>();
+            .drain_filter(|_, area| area.overlap_with(start, end))
+            .collect();
 
-        // 2 new areas at most
-        let mut new_areas = Vec::with_capacity(2);
-
-        for area in overlapped_area {
+        for (_, mut area) in overlapped_area {
             if area.contained_in(start, end) {
                 // update whole area
                 area.update_flags(flags, &mut self.page_table);
@@ -479,33 +473,33 @@ impl MemorySet {
 
                 mid.update_flags(flags, &mut self.page_table);
 
-                new_areas.push(mid);
-                new_areas.push(right);
+                assert!(self.owned_mem.insert(mid.vaddr.into(), mid).is_none());
+                assert!(self.owned_mem.insert(right.vaddr.into(), right).is_none());
             } else if start <= area.vaddr && area.vaddr < end {
                 // split into 2 areas, update the left one
                 let right = area.split(end);
 
                 area.update_flags(flags, &mut self.page_table);
 
-                new_areas.push(right);
+                assert!(self.owned_mem.insert(right.vaddr.into(), right).is_none());
             } else {
                 // split into 2 areas, update the right one
                 let mut right = area.split(start);
 
                 right.update_flags(flags, &mut self.page_table);
 
-                new_areas.push(right);
+                assert!(self.owned_mem.insert(right.vaddr.into(), right).is_none());
             }
-        }
 
-        self.owned_mem.extend(new_areas);
+            assert!(self.owned_mem.insert(area.vaddr.into(), area).is_none());
+        }
     }
 
     /// It will map newly allocated page in the page table. You need to flush TLB after this.
     pub fn handle_page_fault(&mut self, addr: VirtAddr, flags: MappingFlags) {
         match self
             .owned_mem
-            .iter_mut()
+            .values_mut()
             .find(|area| area.vaddr <= addr && addr < area.end_va())
         {
             Some(area) => area.handle_page_fault(addr, flags, &mut self.page_table),

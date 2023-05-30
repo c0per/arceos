@@ -15,6 +15,7 @@ pub mod time;
 #[repr(usize)]
 pub enum SyscallId {
     Fcntl = 25,
+    IoCtl = 29,
     OpenAt = 56,
     Close = 57,
     Read = 63,
@@ -38,6 +39,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         use SyscallId::*;
         match id {
             Fcntl => fs::fcntl(args[0], args[1], args[2]),
+            IoCtl => {
+                warn!("Unimplemented syscall: 29 ioctl, ignored.");
+                0
+            }
             OpenAt => fs::open_at(
                 args[0],
                 args[1] as *const u8,

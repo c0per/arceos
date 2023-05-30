@@ -9,6 +9,12 @@ ArceOS was inspired a lot by [Unikraft](https://github.com/unikraft/unikraft).
 
 🚧 Working In Progress.
 
+## 使用方法
+
+编译好的几个简单动态测例在`libc/`中，使用`./image.sh`构建`disk.img`，使用`./build.sh`编译内核，`./start.sh`启动内核。
+
+还没有写测试脚本，可以在`modules/axruntime/src/lib.rs`中替换`helloworld.dout`以运行其他测例。
+
 ## Features & TODOs
 
 * [x] Architecture: riscv64, aarch64

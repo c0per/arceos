@@ -12,7 +12,7 @@ sudo mount disk.img mnt
 sudo cp -r ./testsuits/riscv-syscalls-testing/user/riscv64/* ./mnt
 
 # copy musl libc and argv.dout
-sudo cp libc/lib* libc/argv.dout mnt/
+sudo cp libc/lib* libc/*.dout mnt/
 sudo mkdir mnt/lib
 sudo cp libc/ld-musl-riscv64.so.1 mnt/lib/
 
