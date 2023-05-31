@@ -1,6 +1,5 @@
-use core::{alloc::Layout, ptr::NonNull};
-
-use axhal::mem::VirtAddr;
+use axhal::{arch::TrapFrame, mem::VirtAddr};
+use core::{alloc::Layout, mem::size_of, ptr::NonNull};
 
 #[derive(Clone)]
 pub(crate) struct TaskStack {
@@ -9,10 +8,6 @@ pub(crate) struct TaskStack {
 }
 
 impl TaskStack {
-    pub fn new(ptr: NonNull<u8>, layout: Layout) -> Self {
-        Self { ptr, layout }
-    }
-
     pub fn alloc(size: usize) -> Self {
         let layout = Layout::from_size_align(size, 16).unwrap();
         Self {
@@ -27,6 +22,18 @@ impl TaskStack {
 
     pub fn bottom(&self) -> VirtAddr {
         VirtAddr::from(self.ptr.as_ptr() as usize)
+    }
+
+    pub fn trap_frame_ptr(&self) -> *const TrapFrame {
+        (usize::from(self.top()) - size_of::<TrapFrame>()) as *const TrapFrame
+    }
+
+    pub fn trap_frame_ptr_mut(&self) -> *mut TrapFrame {
+        (usize::from(self.top()) - size_of::<TrapFrame>()) as *mut TrapFrame
+    }
+
+    pub fn trap_frame_mut(&self) -> &mut TrapFrame {
+        unsafe { &mut *self.trap_frame_ptr_mut() }
     }
 }
 

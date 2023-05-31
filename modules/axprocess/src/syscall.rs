@@ -8,8 +8,8 @@ impl axsyscall::task::SyscallTask for SyscallTaskImpl {
         SCHEDULER.lock().exit_current()
     }
 
-    fn clone() -> isize {
-        SCHEDULER.lock().clone_current() as isize
+    fn clone(flags: usize, user_stack: usize) -> isize {
+        SCHEDULER.lock().clone_current(flags, user_stack) as isize
     }
 
     fn sched_yield() -> isize {

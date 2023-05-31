@@ -8,9 +8,8 @@ use axhal::{
 };
 use axmem::MemorySet;
 use core::{
-    alloc::Layout,
     cell::UnsafeCell,
-    ptr::{null, NonNull},
+    ptr::null,
     str::from_utf8,
     sync::atomic::{AtomicU8, Ordering},
 };
@@ -82,10 +81,11 @@ impl<'a> Loader<'a> {
 
         // Allocate memory for user stack and hold it in memory_set
         let ustack_bottom = VirtAddr::from(0x3fe5_0000);
+        let ustack = ustack_bottom + TASK_STACK_SIZE;
         debug!(
             "[new region] user stack: [{:?}, {:?})",
             ustack_bottom,
-            (ustack_bottom + TASK_STACK_SIZE).align_up_4k()
+            ustack.align_up_4k()
         );
         memory_set.new_region(
             ustack_bottom,
@@ -94,16 +94,11 @@ impl<'a> Loader<'a> {
             Some(&[0]),
             None,
         );
-        let ustack = TaskStack::new(
-            NonNull::new(usize::from(ustack_bottom) as *mut u8)
-                .expect("Error creating NonNull<u8> for ustack bottom"),
-            Layout::from_size_align(TASK_STACK_SIZE, 16).expect("Error creating layout for ustack"),
-        );
 
         let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed);
 
         // handle trap frame
-        let trap_frame = gen_trap_frame(ustack.top(), memory_set.entry);
+        let trap_frame = gen_trap_frame(ustack, memory_set.entry);
 
         unsafe {
             core::ptr::write(

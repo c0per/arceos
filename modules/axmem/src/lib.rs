@@ -507,3 +507,32 @@ impl MemorySet {
         }
     }
 }
+
+impl Clone for MemorySet {
+    fn clone(&self) -> Self {
+        let mut page_table = PageTable::try_new().expect("Error allocating page table.");
+
+        for r in memory_regions() {
+            debug!(
+                "mapping kernel region [0x{:x}, 0x{:x})",
+                usize::from(phys_to_virt(r.paddr)),
+                usize::from(phys_to_virt(r.paddr)) + r.size,
+            );
+            page_table
+                .map_region(phys_to_virt(r.paddr), r.paddr, r.size, r.flags.into(), true)
+                .expect("Error mapping kernel memory");
+        }
+
+        let owned_mem = self
+            .owned_mem
+            .iter()
+            .map(|(vaddr, area)| (*vaddr, unsafe { area.clone_alloc(&mut page_table) }))
+            .collect();
+
+        Self {
+            page_table,
+            owned_mem,
+            entry: self.entry,
+        }
+    }
+}

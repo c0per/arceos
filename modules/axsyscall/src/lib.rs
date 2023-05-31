@@ -66,7 +66,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             SchedYield => task::sched_yield(),
             GetTimeOfDay => time::get_time_of_day(args[0] as *mut time::TimeVal, args[1]),
             MUnmap => mem::munmap(args[0], args[1]),
-            Clone => task::clone(),
+            Clone => task::clone(args[0], args[1]),
             MMap => mem::mmap(
                 args[0],
                 args[1],

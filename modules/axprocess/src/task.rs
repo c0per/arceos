@@ -3,7 +3,7 @@ use alloc::{string::String, sync::Arc};
 use axconfig::TASK_STACK_SIZE;
 use axhal::{
     arch::{enter_user, TaskContext, TrapFrame},
-    mem::PhysAddr,
+    mem::{PhysAddr, VirtAddr},
 };
 use axmem::MemorySet;
 use core::{
@@ -13,6 +13,12 @@ use core::{
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
 };
 use spinlock::SpinNoIrq;
+
+bitflags::bitflags! {
+    pub struct CloneFlags: u32 {
+        const CLONE_VM = 1 << 8;
+    }
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -35,7 +41,7 @@ pub struct Task {
     /// Kernel stack is mapped in "free memory" region.
     pub(crate) kstack: TaskStack,
     /// User stack is mapped in user space (highest address)
-    pub(crate) ustack: TaskStack,
+    pub(crate) ustack: VirtAddr,
 
     #[cfg(feature = "fs")]
     pub(crate) fd_table: SpinNoIrq<FdList>,
@@ -149,43 +155,39 @@ impl Task {
     }
 
     // fork
-    pub fn clone(&self) -> Self {
-        extern "C" {
-            fn task_entry();
-        }
-
+    pub fn clone(&self, flags: usize, user_stack: usize) -> Self {
         let pid = TASK_ID_ALLOCATOR.fetch_add(1, Ordering::Release);
 
-        let mut memory_set = todo!("impl Clone for MemorySet");
-        // let mut memory_set = self.memory_set.lock().clone();
+        let flags =
+            CloneFlags::from_bits(flags as u32 & (!0x3f)).expect("Unsupported clone flags.");
 
-        // Create new U stack
-        // let max_va = memory_set.max_va();
-        // let ustack_bottom = max_va + PAGE_SIZE_4K;
-        // memory_set.alloc_region(
-        //     ustack_bottom,
-        //     TASK_STACK_SIZE,
-        //     MappingFlags::USER | MappingFlags::READ | MappingFlags::WRITE,
-        //     None,
-        // );
-        // let ustack = TaskStack::new(
-        //     NonNull::new(usize::from(ustack_bottom) as *mut u8)
-        //         .expect("Error creating NonNull<u8> for ustack bottom"),
-        //     Layout::from_size_align(axconfig::TASK_STACK_SIZE, 16)
-        //         .expect("Error creating layout for ustack"),
-        // );
+        let memory_set = if flags.contains(CloneFlags::CLONE_VM) {
+            Arc::clone(&self.memory_set)
+        } else {
+            Arc::new(SpinNoIrq::new(MemorySet::clone(&self.memory_set.lock())))
+        };
 
         // Create new S stack
         let kstack = TaskStack::alloc(TASK_STACK_SIZE);
-        let trap_frame = (usize::from(kstack.top()) - size_of::<TrapFrame>()) as *mut TrapFrame;
+        // let trap_frame = (usize::from(kstack.top()) - size_of::<TrapFrame>()) as *mut TrapFrame;
         unsafe {
-            copy_nonoverlapping(self.trap_frame_ptr(), trap_frame, 1);
+            copy_nonoverlapping(self.kstack.trap_frame_ptr(), kstack.trap_frame_ptr_mut(), 1);
         }
 
-        let trap_frame = unsafe { &mut *trap_frame };
-        trap_frame.regs.a0 = 0;
-        // trap_frame.regs.sp = ustack.top().into();
+        let ustack = if user_stack == 0 {
+            self.ustack
+        } else {
+            user_stack.into()
+        };
 
+        let trap_frame = kstack.trap_frame_mut();
+        trap_frame.regs.a0 = 0;
+        trap_frame.regs.sp = user_stack;
+
+        extern "C" {
+            // label in axhal::arch::trap.S, it restores from trap frame then goes back to user mode.
+            fn task_entry();
+        }
         let mut ctx = TaskContext::new();
         ctx.init(task_entry as usize, kstack.top() - size_of::<TrapFrame>());
 
@@ -195,10 +197,9 @@ impl Task {
             state: AtomicU8::new(TaskState::Ready as u8),
             ctx: UnsafeCell::new(ctx),
 
-            memory_set: Arc::new(SpinNoIrq::new(memory_set)),
-
+            memory_set,
             kstack,
-            ustack: self.ustack.clone(),
+            ustack,
 
             #[cfg(feature = "fs")]
             fd_table: SpinNoIrq::new(self.fd_table.lock().clone()),

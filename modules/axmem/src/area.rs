@@ -2,12 +2,17 @@ use alloc::vec::Vec;
 use axalloc::PhysPage;
 use axhal::{
     mem::{virt_to_phys, VirtAddr, PAGE_SIZE_4K},
-    paging::{MappingFlags, PageTable},
+    paging::{MappingFlags, PageSize, PageTable},
 };
 use axio::{Seek, SeekFrom};
+use core::ptr::copy_nonoverlapping;
 
 use crate::MemBackend;
 
+/// A continuous virtual area in user memory.
+///
+/// NOTE: Cloning a `MapArea` needs allocating new phys pages and modifying a page table. So
+/// `Clone` trait won't implemented.
 pub struct MapArea {
     pub pages: Vec<Option<PhysPage>>,
     pub vaddr: VirtAddr,
@@ -378,6 +383,14 @@ impl MapArea {
         self.vaddr + self.size()
     }
 
+    pub fn allocated(&self) -> bool {
+        self.pages.iter().all(|page| page.is_some())
+    }
+
+    pub unsafe fn as_slice(&self) -> &[u8] {
+        unsafe { core::slice::from_raw_parts(self.vaddr.as_ptr(), self.size()) }
+    }
+
     /// Fill `self` with `byte`.
     pub fn fill(&mut self, byte: u8) {
         self.pages.iter_mut().for_each(|page| {
@@ -412,6 +425,65 @@ impl MapArea {
         let _ = page_table
             .update_region(self.vaddr, PAGE_SIZE_4K, flags)
             .unwrap();
+    }
+
+    /// Allocating new phys pages and clone it self.
+    /// This function will modify the page table as well.
+    pub unsafe fn clone_alloc(&self, page_table: &mut PageTable) -> Self {
+        // All the pages have been allocated. Allocate a contiguous area in phys memory.
+        if self.allocated() {
+            MapArea::new_alloc(
+                self.vaddr,
+                self.pages.len(),
+                self.flags,
+                Some(self.as_slice()),
+                self.backend.clone(),
+                page_table,
+            )
+        } else {
+            let pages: Vec<_> = self
+                .pages
+                .iter()
+                .enumerate()
+                .map(|(idx, slot)| {
+                    let vaddr = self.vaddr + (idx * PAGE_SIZE_4K);
+                    match slot.as_ref() {
+                        Some(page) => {
+                            let mut new_page = PhysPage::alloc().unwrap();
+                            unsafe {
+                                copy_nonoverlapping(
+                                    page.as_ptr(),
+                                    new_page.as_mut_ptr(),
+                                    PAGE_SIZE_4K,
+                                );
+                            }
+
+                            let _ = page_table
+                                .map(
+                                    vaddr,
+                                    virt_to_phys(new_page.start_vaddr),
+                                    PageSize::Size4K,
+                                    self.flags,
+                                )
+                                .unwrap();
+
+                            Some(new_page)
+                        }
+                        None => {
+                            let _ = page_table.map_fault(vaddr, PageSize::Size4K).unwrap();
+                            None
+                        }
+                    }
+                })
+                .collect();
+
+            Self {
+                pages,
+                vaddr: self.vaddr,
+                flags: self.flags,
+                backend: self.backend.clone(),
+            }
+        }
     }
 }
 

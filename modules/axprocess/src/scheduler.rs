@@ -50,10 +50,10 @@ impl Scheduler {
         self.reschedule();
     }
 
-    pub fn clone_current(&mut self) -> usize {
+    pub fn clone_current(&mut self, flags: usize, user_stack: usize) -> usize {
         let curr = CurrentTask::try_get().expect("Current task not found");
 
-        let new_task = curr.clone();
+        let new_task = curr.clone(flags, user_stack);
         let new_tid = new_task.tid;
 
         self.add_task(new_task);
