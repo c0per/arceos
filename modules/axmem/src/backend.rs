@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use axfs::api::FileExt;
+use axfs::api::{File, FileExt};
 use axio::{Read, Seek, SeekFrom};
 
 /// File backend for Lazy load `MapArea`. `file` should be a file holding a offset value. Normally,
@@ -42,7 +42,12 @@ impl MemBackend {
 
 impl Clone for MemBackend {
     fn clone(&self) -> Self {
-        let file = self.file.clone_file();
+        let file = self
+            .file
+            .as_any()
+            .downcast_ref::<File>()
+            .expect("Cloning a MemBackend with a non-file object")
+            .clone();
 
         Self {
             file: Box::new(file),

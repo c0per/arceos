@@ -1,6 +1,6 @@
 use axfs_vfs::VfsNodeRef;
 use axio::{prelude::*, Result, SeekFrom};
-use core::fmt;
+use core::{any::Any, fmt};
 
 use crate::fops;
 
@@ -187,14 +187,10 @@ impl Seek for File {
 }
 
 #[cfg(feature = "file-ext")]
-pub trait FileExt: Read + Write + Seek {
+pub trait FileExt: Read + Write + Seek + AsAny {
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
     fn executable(&self) -> bool;
-
-    fn clone_file(&self) -> File {
-        panic!("clone file not implemented for FileExt");
-    }
 
     /// Read from position without changing cursor.
     fn read_from_seek(&mut self, pos: SeekFrom, buf: &mut [u8]) -> Result<usize> {
@@ -237,6 +233,16 @@ pub trait FileExt: Read + Write + Seek {
     }
 }
 
+pub trait AsAny {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T: Any> AsAny for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 #[cfg(feature = "file-ext")]
 impl FileExt for File {
     fn readable(&self) -> bool {
@@ -249,9 +255,5 @@ impl FileExt for File {
 
     fn executable(&self) -> bool {
         self.inner.executable()
-    }
-
-    fn clone_file(&self) -> File {
-        self.clone()
     }
 }

@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use axfs::api::File;
 use axhal::mem::VirtAddr;
 use axhal::paging::MappingFlags;
 use axmem::MemBackend;
@@ -72,7 +73,13 @@ impl SyscallMem for SyscallMemImpl {
             // file backend
             info!("[mmap] fd: {}, offset: 0x{:x}", fd, offset);
             let file = match current.fd_table.lock().query_fd(fd) {
-                Some(file) => Box::new(file.lock().clone_file()),
+                Some(file) => Box::new(
+                    file.lock()
+                        .as_any()
+                        .downcast_ref::<File>()
+                        .expect("Try to mmap with a non-file backend")
+                        .clone(),
+                ),
                 // fd not found
                 None => return -1,
             };
